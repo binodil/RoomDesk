@@ -124,7 +124,84 @@ pub fn icon_png(path: &str, size: i32) -> Result<Vec<u8>, String> {
                 }
             }
         }
+        if has_alpha {
+            let (cw, ch, cropped) = trim_to_square(w as usize, h as usize, &pixels);
+            return encode_png(cw as u32, ch as u32, &cropped);
+        }
         encode_png(w as u32, h as u32, &pixels)
+    }
+}
+
+/// Many programs only ship small icons, which Windows centres in an otherwise
+/// empty 256-pixel image. Cut away the empty border (keeping the icon square
+/// and a little margin), so every icon fills its tile in the room.
+#[cfg_attr(not(windows), allow(dead_code))]
+fn trim_to_square(w: usize, h: usize, rgba: &[u8]) -> (usize, usize, Vec<u8>) {
+    let (mut x0, mut y0, mut x1, mut y1) = (w, h, 0usize, 0usize);
+    for y in 0..h {
+        for x in 0..w {
+            if rgba[(y * w + x) * 4 + 3] > 8 {
+                x0 = x0.min(x);
+                y0 = y0.min(y);
+                x1 = x1.max(x);
+                y1 = y1.max(y);
+            }
+        }
+    }
+    if x0 > x1 || y0 > y1 {
+        return (w, h, rgba.to_vec()); // fully transparent
+    }
+    let content = (x1 - x0 + 1).max(y1 - y0 + 1);
+    let side = (content + content / 16).min(w.max(h));
+    if side * 10 >= w.min(h) * 9 {
+        return (w, h, rgba.to_vec()); // already fills the image
+    }
+    let cx = (x0 + x1) as isize / 2;
+    let cy = (y0 + y1) as isize / 2;
+    let left = cx - side as isize / 2;
+    let top = cy - side as isize / 2;
+    let mut out = vec![0u8; side * side * 4];
+    for y in 0..side {
+        let sy = top + y as isize;
+        if sy < 0 || sy >= h as isize {
+            continue;
+        }
+        for x in 0..side {
+            let sx = left + x as isize;
+            if sx < 0 || sx >= w as isize {
+                continue;
+            }
+            let src = (sy as usize * w + sx as usize) * 4;
+            let dst = (y * side + x) * 4;
+            out[dst..dst + 4].copy_from_slice(&rgba[src..src + 4]);
+        }
+    }
+    (side, side, out)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::trim_to_square;
+
+    #[test]
+    fn small_icon_in_big_image_is_cropped() {
+        let (w, h) = (256, 256);
+        let mut img = vec![0u8; w * h * 4];
+        for y in 112..144 {
+            for x in 112..144 {
+                img[(y * w + x) * 4 + 3] = 255;
+            }
+        }
+        let (cw, ch, out) = trim_to_square(w, h, &img);
+        assert_eq!((cw, ch), (34, 34));
+        assert_eq!(out.len(), 34 * 34 * 4);
+        assert_eq!(out[(17 * 34 + 17) * 4 + 3], 255);
+    }
+
+    #[test]
+    fn full_image_is_left_alone() {
+        let img = vec![255u8; 64 * 64 * 4];
+        assert_eq!(trim_to_square(64, 64, &img).0, 64);
     }
 }
 

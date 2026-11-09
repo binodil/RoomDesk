@@ -17,11 +17,33 @@
     <div id="editbar" class="toolbar" role="toolbar" aria-label="Edit items" hidden>
       <div class="caltext">
         <strong id="editTitle">Edit items</strong>
-        <span>Drag files, folders or shortcuts from File Explorer onto a wall or the floor. Drag items to move them, even onto another surface. Scroll over an item to resize it. Delete removes it.</span>
+        <span>Drag files from File Explorer onto a wall or the floor, or use Add. Drag items to move them, even onto another surface. Scroll to resize. Double-click a note or whiteboard to write on it. Delete removes the selected item.</span>
       </div>
       <button id="editAdd" type="button">Add files…</button>
+      <div class="menuwrap">
+        <button id="addMenuBtn" type="button" aria-haspopup="true" aria-expanded="false">Add item ▾</button>
+        <div id="addMenu" class="menu" role="menu" hidden>
+          <button type="button" role="menuitem" data-add="note"><span class="ic">📝</span>Sticky note</button>
+          <button type="button" role="menuitem" data-add="image"><span class="ic">🖼️</span>Picture…</button>
+          <button type="button" role="menuitem" data-add="whiteboard"><span class="ic">🧑‍🏫</span>Whiteboard</button>
+          <button type="button" role="menuitem" data-add="mirror"><span class="ic">🪞</span>Mirror</button>
+          <button type="button" role="menuitem" data-add="clock"><span class="ic">🕒</span>Clock</button>
+          <button type="button" role="menuitem" data-add="plant"><span class="ic">🪴</span>Plant <small>click to water</small></button>
+          <button type="button" role="menuitem" data-add="rose"><span class="ic">🌹</span>Rose <small>lasts about 2 weeks</small></button>
+          <button type="button" role="menuitem" data-add="apple"><span class="ic">🍎</span>Apple <small>browns in a week</small></button>
+          <div class="menulabel">Stickers</div>
+          <div id="stickerRow" class="stickers"></div>
+        </div>
+      </div>
       <button id="editRemove" type="button" disabled>Remove</button>
       <button id="editDone" type="button" class="primary">Done</button>
+    </div>
+
+    <!-- A whiteboard or note, zoomed in to draw and type on. -->
+    <div id="focus" hidden>
+      <div id="focusBar" class="toolbar" role="toolbar" aria-label="Whiteboard and note tools"></div>
+      <div id="focusBoard"><div class="wbframe"><div id="wbSurf" class="wbsurf live"></div></div></div>
+      <div id="focusNote"><textarea id="noteText" spellcheck="false" placeholder="Write something…" aria-label="Note text"></textarea></div>
     </div>
 
     <!-- Calibrate mode: outlines, 8 draggable corner points and a small toolbar. -->

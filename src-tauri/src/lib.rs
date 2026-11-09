@@ -18,23 +18,46 @@ use tauri::{AppHandle, Emitter, Manager, RunEvent, WebviewWindow};
 use tauri_plugin_dialog::DialogExt;
 use tauri_plugin_opener::OpenerExt;
 
+const IMAGE_EXTENSIONS: [&str; 6] = ["jpg", "jpeg", "png", "webp", "bmp", "gif"];
+
+/// An image file as a data URL the page can show.
+fn image_data_url(path: &std::path::Path) -> Result<String, String> {
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .map(|e| e.to_ascii_lowercase())
+        .unwrap_or_default();
+    if !IMAGE_EXTENSIONS.contains(&ext.as_str()) {
+        return Err("not an image".into());
+    }
+    let size = fs::metadata(path).map_err(|e| e.to_string())?.len();
+    if size > 40 * 1024 * 1024 {
+        return Err("image is larger than 40 MB".into());
+    }
+    let bytes = fs::read(path).map_err(|e| e.to_string())?;
+    let mime = match ext.as_str() {
+        "png" => "image/png",
+        "webp" => "image/webp",
+        "gif" => "image/gif",
+        "bmp" => "image/bmp",
+        _ => "image/jpeg",
+    };
+    Ok(format!("data:{mime};base64,{}", STANDARD.encode(bytes)))
+}
+
 /// The chosen room photo as a data URL, or `None` to use the built-in sample room.
 #[tauri::command]
 fn load_photo(app: AppHandle) -> Option<String> {
     let path = settings::load(&app).photo?;
-    let bytes = fs::read(&path).ok()?;
-    let ext = path
-        .extension()
-        .and_then(|e| e.to_str())
-        .map(|e| e.to_ascii_lowercase());
-    let mime = match ext.as_deref() {
-        Some("png") => "image/png",
-        Some("webp") => "image/webp",
-        Some("gif") => "image/gif",
-        Some("bmp") => "image/bmp",
-        _ => "image/jpeg",
-    };
-    Some(format!("data:{mime};base64,{}", STANDARD.encode(bytes)))
+    image_data_url(&path).ok()
+}
+
+/// A picture placed in the room (or stuck on a whiteboard), as a data URL.
+#[tauri::command]
+async fn load_image(path: String) -> Result<String, String> {
+    tauri::async_runtime::spawn_blocking(move || image_data_url(std::path::Path::new(&path)))
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 /// Let the user pick a room photo. Blocks until the picker closes, so call it
@@ -44,7 +67,7 @@ pub(crate) fn pick_photo(app: &AppHandle) -> Result<bool, String> {
         .dialog()
         .file()
         .set_title("Choose a photo of your room")
-        .add_filter("Images", &["jpg", "jpeg", "png", "webp", "bmp", "gif"])
+        .add_filter("Images", &IMAGE_EXTENSIONS)
         .blocking_pick_file();
     let Some(file) = picked else {
         return Ok(false);
@@ -124,27 +147,105 @@ fn describe_paths(paths: Vec<String>) -> Vec<icons::ItemInfo> {
     paths.iter().map(|p| icons::describe(p)).collect()
 }
 
+/// Run a file picker on top of the rooms.
+///
+/// While editing, every room window is always-on-top, which would cover the
+/// picker on whichever monitor it opens. So all rooms drop back while it is open,
+/// the picker belongs to the window that asked (Windows keeps it above that one),
+/// and the rooms come forward again afterwards.
+fn with_picker<T>(app: &AppHandle, window: &WebviewWindow, pick: impl FnOnce() -> T) -> T {
+    let rooms = monitors::room_windows(app);
+    for (_, w) in &rooms {
+        let _ = w.set_always_on_top(false);
+    }
+    let result = pick();
+    if monitors::is_front(app) {
+        for (_, w) in &rooms {
+            let _ = w.set_always_on_top(true);
+        }
+    }
+    let _ = window.set_focus();
+    result
+}
+
 /// Let the user pick files to add to the room (the file picker in edit mode).
 #[tauri::command]
 async fn pick_items(app: AppHandle, window: WebviewWindow) -> Vec<icons::ItemInfo> {
-    // The room sits always-on-top while editing, which would cover the picker.
-    // Let it drop back while the picker is open, and make the picker its child
-    // so Windows keeps the picker above it.
-    let _ = window.set_always_on_top(false);
-    let picked = app
-        .dialog()
-        .file()
-        .set_title("Add files or shortcuts to the room")
-        .set_parent(&window)
-        .blocking_pick_files();
-    let _ = window.set_always_on_top(true);
-    let _ = window.set_focus();
+    let picked = with_picker(&app, &window, || {
+        app.dialog()
+            .file()
+            .set_title("Add files or shortcuts to the room")
+            .set_parent(&window)
+            .blocking_pick_files()
+    });
     picked
         .unwrap_or_default()
         .into_iter()
         .filter_map(|f| f.into_path().ok())
         .map(|p| icons::describe(&p.to_string_lossy()))
         .collect()
+}
+
+/// Let the user pick one picture (for a framed picture or a whiteboard).
+#[tauri::command]
+async fn pick_image(app: AppHandle, window: WebviewWindow) -> Option<String> {
+    let picked = with_picker(&app, &window, || {
+        app.dialog()
+            .file()
+            .set_title("Choose a picture")
+            .add_filter("Images", &IMAGE_EXTENSIONS)
+            .set_parent(&window)
+            .blocking_pick_file()
+    });
+    picked?.into_path().ok().map(|p| p.to_string_lossy().into_owned())
+}
+
+/// Bring the rooms in front so one item (a whiteboard or a note) can be used with
+/// mouse and keyboard, and give this monitor's room the keyboard.
+#[tauri::command]
+fn bring_to_front(app: AppHandle, window: WebviewWindow) {
+    if !monitors::is_front(&app) {
+        monitors::set_front(&app, true);
+    }
+    // Bringing the rooms forward focuses each one in turn; take the focus back afterwards.
+    std::thread::spawn(move || {
+        for _ in 0..3 {
+            std::thread::sleep(std::time::Duration::from_millis(350));
+            let _ = window.set_focus();
+        }
+    });
+}
+
+/// Whiteboards are kept in their own files, since drawings and pictures can be large.
+fn board_path(app: &AppHandle, id: &str) -> Result<std::path::PathBuf, String> {
+    if id.is_empty() || id.len() > 64 || !id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-') {
+        return Err("bad whiteboard id".into());
+    }
+    Ok(settings::data_folder(app)?.join("boards").join(format!("{id}.json")))
+}
+
+#[tauri::command]
+fn load_board(app: AppHandle, id: String) -> Option<Value> {
+    let text = fs::read_to_string(board_path(&app, &id).ok()?).ok()?;
+    serde_json::from_str(&text).ok()
+}
+
+#[tauri::command]
+fn save_board(app: AppHandle, id: String, board: Value) -> Result<(), String> {
+    let path = board_path(&app, &id)?;
+    if let Some(dir) = path.parent() {
+        fs::create_dir_all(dir).map_err(|e| e.to_string())?;
+    }
+    let tmp = path.with_extension("json.tmp");
+    fs::write(&tmp, board.to_string()).map_err(|e| e.to_string())?;
+    fs::rename(&tmp, &path).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn delete_board(app: AppHandle, id: String) {
+    if let Ok(path) = board_path(&app, &id) {
+        let _ = fs::remove_file(path);
+    }
 }
 
 /// Icons are cached so every room window (and every redraw) doesn't ask Windows again.
@@ -216,6 +317,12 @@ pub fn run() {
             save_layout,
             describe_paths,
             pick_items,
+            pick_image,
+            load_image,
+            bring_to_front,
+            load_board,
+            save_board,
+            delete_board,
             item_icon,
             open_item,
             set_hit_regions

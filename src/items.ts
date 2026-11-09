@@ -1,39 +1,63 @@
-// Desktop items in the room: app shortcuts, files and folders.
+// Items in the room: app shortcuts, files and folders, plus notes, stickers,
+// pictures, a clock, whiteboards, mirrors and things that age (see decor.ts).
 //
 // Each item sits on one surface at a position given in that surface's flat
 // coordinates (0–1 across, 0–1 down), so it keeps its place when the
 // calibration or the screen size changes.
 
 import { invoke } from "@tauri-apps/api/core";
+import { boardHtml, deleteBoard, loadBoard } from "./board";
+import {
+  CLOCK_HTML, DECOR_KINDS, DECOR_SIZE, NOTE_COLORS, STICKERS, appleSvg, daysSince,
+  plantSvg, roseSvg, stickerSvg, tickClocks, type DecorKind,
+} from "./decor";
 import { BASE, Surfaces } from "./surfaces";
 import type { SurfaceName } from "./room";
 
-export type ItemKind = "folder" | "shortcut" | "app" | "file";
+export type FileKind = "folder" | "shortcut" | "app" | "file";
+export type ItemKind = FileKind | DecorKind;
 
 export type Item = {
   id: string;
-  path: string;
-  name: string;
   kind: ItemKind;
   surface: SurfaceName;
-  /** Centre of the icon, as fractions of the surface (0–1). */
+  /** Centre of the item, as fractions of the surface (0–1). */
   x: number;
   y: number;
-  /** Icon size as a fraction of the surface height. */
+  /** Width as a fraction of the surface height. */
   size: number;
+  /** Files: what to open. Pictures: the image file. */
+  path?: string;
+  /** Files: the label under the icon. */
+  name?: string;
+  /** Notes. */
+  text?: string;
+  color?: string;
+  /** Stickers. */
+  glyph?: string;
+  /** Plant: when planted. Rose and apple: when put there. */
+  since?: number;
+  /** Plant: when last watered. */
+  watered?: number;
+  /** Small tilt in degrees (notes and stickers). */
+  rot?: number;
 };
 
 export type Layout = { version: 1; items: Item[] };
 
 export type ItemInfo = { path: string; name: string; kind: ItemKind };
 
-const DEFAULT_SIZE = 0.11;
-const MIN_SIZE = 0.04;
-const MAX_SIZE = 0.6;
-/** The label under the icon makes an item about this much taller than wide. */
-const LABEL_EXTRA = 0.5;
+const DEFAULT_SIZE = 0.16;
+const MIN_SIZE = 0.03;
+const MAX_SIZE = 1.6;
 
-const KINDS: ItemKind[] = ["folder", "shortcut", "app", "file"];
+const FILE_KINDS: FileKind[] = ["folder", "shortcut", "app", "file"];
+export const isFile = (kind: ItemKind): kind is FileKind => (FILE_KINDS as string[]).includes(kind);
+const KINDS: ItemKind[] = [...FILE_KINDS, ...DECOR_KINDS];
+
+/** Items that do something when clicked behind the desktop icons. Others let clicks through to the desktop. */
+export const isClickable = (kind: ItemKind) =>
+  isFile(kind) || kind === "note" || kind === "whiteboard" || kind === "plant" || kind === "rose" || kind === "apple";
 const SURFACES_OK = new Set(["back", "left", "right", "floor", "ceiling"]);
 
 export function parseLayout(data: unknown): Layout {
@@ -42,17 +66,26 @@ export function parseLayout(data: unknown): Layout {
   if (Array.isArray(list)) {
     for (const raw of list) {
       const r = raw as Partial<Item>;
-      if (typeof r.id !== "string" || typeof r.path !== "string" || !SURFACES_OK.has(r.surface as string)) continue;
-      items.push({
+      if (typeof r.id !== "string" || !SURFACES_OK.has(r.surface as string)) continue;
+      const kind = KINDS.includes(r.kind as ItemKind) ? (r.kind as ItemKind) : "file";
+      if ((isFile(kind) || kind === "image") && typeof r.path !== "string") continue;
+      const item: Item = {
         id: r.id,
-        path: r.path,
-        name: typeof r.name === "string" ? r.name : r.path,
-        kind: KINDS.includes(r.kind as ItemKind) ? (r.kind as ItemKind) : "file",
+        kind,
         surface: r.surface as SurfaceName,
         x: clamp01(Number(r.x)),
         y: clamp01(Number(r.y)),
         size: clampSize(Number(r.size) || DEFAULT_SIZE),
-      });
+      };
+      if (typeof r.path === "string") item.path = r.path;
+      if (isFile(kind)) item.name = typeof r.name === "string" ? r.name : r.path;
+      if (typeof r.text === "string") item.text = r.text;
+      if (typeof r.color === "string") item.color = r.color;
+      if (typeof r.glyph === "string") item.glyph = r.glyph;
+      if (Number.isFinite(r.since)) item.since = r.since;
+      if (Number.isFinite(r.watered)) item.watered = r.watered;
+      if (Number.isFinite(r.rot)) item.rot = r.rot;
+      items.push(item);
     }
   }
   return { version: 1, items };
@@ -66,32 +99,128 @@ const clampSize = (v: number) => Math.min(MAX_SIZE, Math.max(MIN_SIZE, v));
 const iconCache = new Map<string, Promise<string>>();
 
 /** A plain placeholder while the real Windows icon loads (or if it can't be read). */
-function placeholder(kind: ItemKind): string {
+function placeholder(kind: FileKind): string {
   const color = { folder: "#e8b94a", shortcut: "#6fb1ff", app: "#6fb1ff", file: "#e9ecef" }[kind];
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect x="8" y="8" width="48" height="48" rx="10" fill="${color}"/></svg>`;
   return `data:image/svg+xml,${encodeURIComponent(svg)}`;
 }
 
-function iconFor(item: Item): Promise<string> {
-  let p = iconCache.get(item.path);
+function iconFor(path: string, kind: FileKind): Promise<string> {
+  let p = iconCache.get(path);
   if (!p) {
-    p = invoke<string>("item_icon", { path: item.path }).catch(() => placeholder(item.kind));
-    iconCache.set(item.path, p);
+    p = invoke<string>("item_icon", { path }).catch(() => placeholder(kind));
+    iconCache.set(path, p);
   }
   return p;
 }
 
+const pictureCache = new Map<string, Promise<string | null>>();
+
+function pictureFor(path: string): Promise<string | null> {
+  let p = pictureCache.get(path);
+  if (!p) {
+    p = invoke<string>("load_image", { path }).catch(() => null);
+    pictureCache.set(path, p);
+  }
+  return p;
+}
+
+/** The inside of an item's element, built once when it first appears. */
+function buildItem(item: Item, el: HTMLDivElement): void {
+  if (isFile(item.kind)) {
+    const kind = item.kind;
+    el.title = item.path ?? "";
+    const img = document.createElement("img");
+    img.alt = "";
+    img.draggable = false;
+    img.src = placeholder(kind);
+    void iconFor(item.path ?? "", kind).then((src) => (img.src = src));
+    const label = document.createElement("div");
+    label.className = "name";
+    label.textContent = item.name ?? "";
+    el.append(img, label);
+    return;
+  }
+  switch (item.kind) {
+    case "note":
+      el.innerHTML = '<div class="notetext"></div>';
+      break;
+    case "image": {
+      el.innerHTML = '<div class="pic"><img alt="" draggable="false"></div>';
+      const img = el.querySelector("img") as HTMLImageElement;
+      void pictureFor(item.path ?? "").then((src) => {
+        if (src) img.src = src;
+        else el.classList.add("missing");
+      });
+      break;
+    }
+    case "sticker":
+      el.innerHTML = stickerSvg(item.glyph);
+      break;
+    case "clock":
+      el.innerHTML = CLOCK_HTML;
+      tickClocks(el);
+      break;
+    case "whiteboard":
+      el.innerHTML = '<div class="wbframe"><div class="wbsurf"></div></div><div class="wbledge"></div>';
+      break;
+    case "mirror":
+      el.innerHTML = '<div class="mframe"><div class="mscene"></div><div class="mglass"></div></div>';
+      break;
+    default:
+      break; // plant, rose, apple: drawn in updateItem
+  }
+}
+
+/** The parts of an item that change: note text, age, and so on. */
+function updateItem(item: Item, el: HTMLDivElement, now: number): void {
+  switch (item.kind) {
+    case "note": {
+      el.style.setProperty("--note", item.color ?? NOTE_COLORS[0]);
+      const t = el.querySelector(".notetext") as HTMLElement;
+      if (t.textContent !== (item.text ?? "")) t.textContent = item.text ?? "";
+      break;
+    }
+    case "plant":
+      el.innerHTML = plantSvg(daysSince(item.since, now), daysSince(item.watered, now));
+      break;
+    case "rose":
+      el.innerHTML = roseSvg(daysSince(item.since, now));
+      break;
+    case "apple":
+      el.innerHTML = appleSvg(daysSince(item.since, now));
+      break;
+    case "whiteboard":
+      void loadBoard(item.id).then((b) => {
+        (el.querySelector(".wbsurf") as HTMLElement).innerHTML = boardHtml(b);
+      });
+      break;
+    default:
+      break;
+  }
+}
+
 // ---------- Drawing ----------
+
+/** Things that stand upright when put on the floor, instead of lying flat on it. */
+const STANDS: ItemKind[] = ["plant", "rose", "apple"];
+const standsUp = (item: Item) => item.surface === "floor" && STANDS.includes(item.kind);
 
 export class Items {
   layout: Layout = { version: 1, items: [] };
   selectedId: string | null = null;
   private els = new Map<string, HTMLDivElement>();
+  /** Screen-space layer for things standing on the floor. */
+  private standing: HTMLDivElement;
 
   constructor(
     private surfaces: Surfaces,
     private onChange: () => void,
-  ) {}
+  ) {
+    this.standing = document.createElement("div");
+    this.standing.className = "standing";
+    surfaces.layer.appendChild(this.standing);
+  }
 
   find(id: string): Item | undefined {
     return this.layout.items.find((i) => i.id === id);
@@ -100,34 +229,51 @@ export class Items {
   /** Create, move or remove item elements so they match the layout. */
   render(): void {
     const seen = new Set<string>();
+    const now = Date.now();
     for (const item of this.layout.items) {
       seen.add(item.id);
       let el = this.els.get(item.id);
-      if (!el) {
+      if (!el || el.dataset.kind !== item.kind) {
+        el?.remove();
         el = document.createElement("div");
-        el.className = "item";
+        el.className = `item k-${item.kind}`;
         el.dataset.id = item.id;
-        el.title = item.path;
-        const img = document.createElement("img");
-        img.alt = "";
-        img.draggable = false;
-        img.src = placeholder(item.kind);
-        void iconFor(item).then((src) => (img.src = src));
-        const label = document.createElement("div");
-        label.className = "name";
-        label.textContent = item.name;
-        el.append(img, label);
+        el.dataset.kind = item.kind;
+        buildItem(item, el);
         this.els.set(item.id, el);
+        el.dataset.version = "";
+      }
+      // Redraw the changing parts only when something about them changed.
+      const version = `${item.text}|${item.color}|${item.since}|${item.watered}|${Math.floor(now / 600000)}`;
+      if (el.dataset.version !== version) {
+        el.dataset.version = version;
+        updateItem(item, el, now);
+      }
+      const width = this.surfaces.geometry[item.surface]?.width ?? BASE;
+      const size = item.size * BASE;
+      if (standsUp(item)) {
+        this.placeStanding(item, el, width, size);
+        el.classList.toggle("selected", item.id === this.selectedId);
+        continue;
       }
       const layer = this.surfaces.itemLayers[item.surface];
       if (el.parentElement !== layer) layer.appendChild(el);
+      el.style.zIndex = "";
 
-      const width = this.surfaces.geometry[item.surface]?.width ?? BASE;
-      const size = item.size * BASE;
       el.style.width = `${size}px`;
-      el.style.left = `${item.x * width - size / 2}px`;
-      el.style.top = `${item.y * BASE - size / 2}px`;
       el.style.setProperty("--label", `${Math.max(10, size * 0.16)}px`);
+      el.style.setProperty("--s", `${size}px`);
+      if (isFile(item.kind)) {
+        // The icon (not the label below it) is centred on the item's position.
+        el.style.left = `${item.x * width - size / 2}px`;
+        el.style.top = `${item.y * BASE - size / 2}px`;
+        el.style.transform = "";
+      } else {
+        el.style.left = `${item.x * width}px`;
+        el.style.top = `${item.y * BASE}px`;
+        el.style.transform = `translate(-50%, -50%) rotate(${item.rot ?? 0}deg)`;
+        el.style.transformOrigin = "";
+      }
       el.classList.toggle("selected", item.id === this.selectedId);
     }
     for (const [id, el] of this.els) {
@@ -138,29 +284,61 @@ export class Items {
     }
   }
 
-  /** Screen rectangles of every item (physical pixels), so clicks behind the icons can find them. */
+  /** Draw an item upright on the floor: its bottom sits on the floor point, and it is
+   *  scaled by how far away that point is, like a real object standing there. */
+  private placeStanding(item: Item, el: HTMLDivElement, width: number, size: number): void {
+    if (el.parentElement !== this.standing) this.standing.appendChild(el);
+    const at = { x: item.x * width, y: item.y * BASE };
+    const base = this.surfaces.toScreen("floor", at);
+    const step = this.surfaces.toScreen("floor", { x: at.x + 10, y: at.y });
+    if (!base || !step) {
+      el.hidden = true;
+      return;
+    }
+    el.hidden = false;
+    const scale = Math.hypot(step.x - base.x, step.y - base.y) / 10;
+    el.style.width = `${size}px`;
+    el.style.setProperty("--label", `${Math.max(10, size * 0.16)}px`);
+    el.style.setProperty("--s", `${size}px`);
+    el.style.left = `${base.x}px`;
+    el.style.top = `${base.y}px`;
+    el.style.transform = `translate(-50%, -100%) scale(${scale})`;
+    el.style.transformOrigin = "50% 100%";
+    // Nearer things (further down the floor) are drawn in front.
+    el.style.zIndex = String(Math.round(item.y * 1000));
+  }
+
+  /** Redraw things that change with time (call every few minutes). */
+  refreshAging(): void {
+    const now = Date.now();
+    for (const item of this.layout.items) {
+      const el = this.els.get(item.id);
+      if (el && (item.kind === "plant" || item.kind === "rose" || item.kind === "apple")) updateItem(item, el, now);
+    }
+  }
+
+  /** Show a whiteboard's latest drawing on the wall. */
+  async refreshBoard(id: string): Promise<void> {
+    const surf = this.els.get(id)?.querySelector<HTMLElement>(".wbsurf");
+    if (surf) surf.innerHTML = boardHtml(await loadBoard(id));
+  }
+
+  element(id: string): HTMLDivElement | undefined {
+    return this.els.get(id);
+  }
+
+  /** Screen rectangles of every clickable item (physical pixels), so clicks behind the icons can find them. */
   hitRegions(): { id: string; x: number; y: number; w: number; h: number }[] {
     const dpr = window.devicePixelRatio || 1;
     const out = [];
     for (const item of this.layout.items) {
-      const width = this.surfaces.geometry[item.surface]?.width ?? BASE;
-      const size = item.size * BASE;
-      const left = item.x * width - size / 2;
-      const top = item.y * BASE - size / 2;
-      const corners = [
-        { x: left, y: top },
-        { x: left + size, y: top },
-        { x: left + size, y: top + size * (1 + LABEL_EXTRA) },
-        { x: left, y: top + size * (1 + LABEL_EXTRA) },
-      ]
-        .map((p) => this.surfaces.toScreen(item.surface, p))
-        .filter((p): p is { x: number; y: number } => p !== null);
-      if (corners.length < 4) continue;
-      const xs = corners.map((p) => p.x);
-      const ys = corners.map((p) => p.y);
-      const x = Math.min(...xs);
-      const y = Math.min(...ys);
-      out.push({ id: item.id, x: x * dpr, y: y * dpr, w: (Math.max(...xs) - x) * dpr, h: (Math.max(...ys) - y) * dpr });
+      if (!isClickable(item.kind)) continue;
+      const el = this.els.get(item.id);
+      if (!el || el.hidden) continue;
+      // The browser works out where the bent (perspective) element ends up on screen.
+      const r = el.getBoundingClientRect();
+      if (r.width <= 0 || r.height <= 0) continue;
+      out.push({ id: item.id, x: r.left * dpr, y: r.top * dpr, w: r.width * dpr, h: r.height * dpr });
     }
     return out;
   }
@@ -173,7 +351,7 @@ export class Items {
         id: crypto.randomUUID(),
         path: info.path,
         name: info.name,
-        kind: info.kind,
+        kind: info.kind as FileKind,
         surface,
         // Several files dropped at once are lined up side by side.
         x: clamp01(x + i * 0.08),
@@ -187,7 +365,47 @@ export class Items {
     this.onChange();
   }
 
+  /** Add a note, sticker, clock, plant and so on. */
+  addDecor(kind: DecorKind, surface: SurfaceName, x: number, y: number, extra: Partial<Item> = {}): Item {
+    const now = Date.now();
+    const item: Item = {
+      id: crypto.randomUUID(),
+      kind,
+      surface,
+      x: clamp01(x),
+      y: clamp01(y),
+      size: DECOR_SIZE[kind],
+      ...extra,
+    };
+    if (kind === "note") {
+      item.text ??= "";
+      item.color ??= NOTE_COLORS[this.layout.items.filter((i) => i.kind === "note").length % NOTE_COLORS.length];
+      item.rot ??= Math.round((Math.random() * 6 - 3) * 10) / 10;
+    }
+    if (kind === "sticker") {
+      item.glyph ??= Object.keys(STICKERS)[0];
+      item.rot ??= Math.round(Math.random() * 24 - 12);
+    }
+    if (kind === "plant" || kind === "rose" || kind === "apple") item.since = now;
+    if (kind === "plant") item.watered = now;
+    this.layout.items.push(item);
+    this.selectedId = item.id;
+    this.render();
+    this.onChange();
+    return item;
+  }
+
+  /** Change an item (note text, watering, a fresh rose...) and save. */
+  update(id: string, changes: Partial<Item>): void {
+    const item = this.find(id);
+    if (!item) return;
+    Object.assign(item, changes);
+    this.render();
+    this.onChange();
+  }
+
   remove(id: string): void {
+    if (this.find(id)?.kind === "whiteboard") deleteBoard(id);
     this.layout.items = this.layout.items.filter((i) => i.id !== id);
     if (this.selectedId === id) this.selectedId = null;
     this.render();

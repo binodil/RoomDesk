@@ -2,7 +2,10 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { availableMonitors, currentMonitor, getCurrentWindow } from "@tauri-apps/api/window";
-import { Items, parseLayout, type ItemInfo } from "./items";
+import { FocusEditor } from "./board";
+import { STICKERS, stickerSvg, tickClocks, type DecorKind } from "./decor";
+import { Items, isFile, parseLayout, type ItemInfo } from "./items";
+import { refreshMirrors } from "./mirror";
 import { POINT_NAMES, defaultCalibration, parseCalibration, type Calibration, type PointName } from "./room";
 import { BASE, SURFACE_NAMES, Surfaces } from "./surfaces";
 
@@ -11,8 +14,9 @@ import { BASE, SURFACE_NAMES, Surfaces } from "./surfaces";
 //   use       – behind the icons; clicking an item opens it
 //   edit      – in front; drag files in, move, resize and remove items
 //   calibrate – in front; drag the room's corners onto the photo
+//   focus     – in front; one whiteboard or note zoomed in to draw or type on
 
-type Mode = "use" | "edit" | "calibrate";
+type Mode = "use" | "edit" | "calibrate" | "focus";
 
 const SAMPLE_ROOM = "/default-room.jpg";
 
@@ -28,7 +32,9 @@ const surfaces = new Surfaces($<HTMLDivElement>("surfaces"));
 const items = new Items(surfaces, () => {
   saveLayoutSoon();
   updateRemoveButton();
+  refreshMirrorsSoon();
 });
+const focusEditor = new FocusEditor();
 
 let calibration: Calibration = defaultCalibration();
 let monitorKey = "";
@@ -46,6 +52,7 @@ async function showPhoto(): Promise<void> {
     console.error("Could not load the room photo:", err);
   }
   photo.style.backgroundImage = `url("${url}")`;
+  refreshMirrorsSoon();
 }
 
 // ---------- Per-monitor data (calibration and items) ----------
@@ -89,6 +96,8 @@ const saveLayoutSoon = debounce(() => {
   sendHitRegionsSoon();
 }, 300);
 
+const refreshMirrorsSoon = debounce(() => refreshMirrors(items, surfaces, photo.style.backgroundImage), 250);
+
 const sendHitRegionsSoon = debounce(() => {
   invoke("set_hit_regions", { regions: items.hitRegions() }).catch((e) => console.error(e));
 }, 100);
@@ -111,6 +120,7 @@ function render(): void {
   surfaces.setGridVisible(showGrid || mode === "calibrate");
   items.render();
   sendHitRegionsSoon();
+  refreshMirrorsSoon();
 
   if (mode === "calibrate") {
     const w = window.innerWidth;
@@ -130,6 +140,12 @@ function render(): void {
 }
 
 function setMode(next: Mode): void {
+  if (next !== "focus" && focusEditor.isOpen) {
+    // Switched from the tray while a whiteboard or note was open: save it and move on.
+    mode = next;
+    focusEditor.close();
+  }
+  closeAddMenu();
   mode = next;
   document.body.dataset.mode = next;
   editor.hidden = next !== "calibrate";
@@ -205,7 +221,8 @@ let draggingItem: { id: string; pointer: number; moved: boolean } | null = null;
 document.addEventListener("pointerdown", (e) => {
   if (mode !== "edit") return;
   const el = (e.target as HTMLElement).closest<HTMLElement>(".item");
-  if ((e.target as HTMLElement).closest(".toolbar")) return;
+  if ((e.target as HTMLElement).closest(".toolbar, #focus")) return;
+  closeAddMenu();
   if (!el) {
     items.select(null);
     updateRemoveButton();
@@ -233,7 +250,7 @@ window.addEventListener("pointercancel", endItemDrag);
 document.addEventListener(
   "wheel",
   (e) => {
-    if (mode !== "edit") return;
+    if (mode !== "edit" || (e.target as HTMLElement).closest(".toolbar")) return;
     const el = (e.target as HTMLElement).closest<HTMLElement>(".item");
     const id = el?.dataset.id ?? items.selectedId;
     if (!id) return;
@@ -245,9 +262,63 @@ document.addEventListener(
 );
 
 $("editAdd").addEventListener("click", async () => {
+  closeAddMenu();
   const picked = await invoke<ItemInfo[]>("pick_items").catch(() => []);
   if (picked.length) items.add(picked, "back", 0.2, 0.45);
   updateRemoveButton();
+});
+
+// "Add item" menu: notes, pictures, whiteboard, mirror, clock, plant, rose, apple, stickers.
+const addMenu = $<HTMLDivElement>("addMenu");
+const addMenuBtn = $<HTMLButtonElement>("addMenuBtn");
+$("stickerRow").innerHTML = Object.keys(STICKERS)
+  .map((g) => `<button type="button" role="menuitem" data-add="sticker" data-glyph="${g}" aria-label="${g} sticker">${stickerSvg(g)}</button>`)
+  .join("");
+
+function closeAddMenu(): void {
+  addMenu.hidden = true;
+  addMenuBtn.setAttribute("aria-expanded", "false");
+}
+addMenuBtn.addEventListener("click", () => {
+  addMenu.hidden = !addMenu.hidden;
+  addMenuBtn.setAttribute("aria-expanded", String(!addMenu.hidden));
+});
+
+/** Where new things appear: spread over the back wall so they don't all stack up. */
+const START_SPOTS: Record<DecorKind, [number, number]> = {
+  note: [0.2, 0.3],
+  sticker: [0.5, 0.2],
+  image: [0.75, 0.35],
+  clock: [0.5, 0.18],
+  plant: [0.88, 0.78],
+  rose: [0.62, 0.7],
+  apple: [0.7, 0.8],
+  whiteboard: [0.45, 0.42],
+  mirror: [0.8, 0.45],
+};
+
+addMenu.addEventListener("click", async (e) => {
+  const b = (e.target as HTMLElement).closest<HTMLButtonElement>("button[data-add]");
+  if (!b) return;
+  const kind = b.dataset.add as DecorKind;
+  closeAddMenu();
+  const nudge = (items.layout.items.filter((i) => i.kind === kind).length % 5) * 0.04;
+  const [x, y] = START_SPOTS[kind];
+  if (kind === "image") {
+    const path = await invoke<string | null>("pick_image").catch(() => null);
+    if (path) items.addDecor("image", "back", x - nudge, y + nudge, { path });
+  } else {
+    const item = items.addDecor(kind, "back", x + nudge, y + nudge, kind === "sticker" ? { glyph: b.dataset.glyph } : {});
+    if (kind === "note") openFocus(item.id);
+  }
+  updateRemoveButton();
+});
+
+// Double-click a note or whiteboard while editing to write on it.
+document.addEventListener("dblclick", (e) => {
+  if (mode !== "edit") return;
+  const id = (e.target as HTMLElement).closest<HTMLElement>(".item")?.dataset.id;
+  if (id) openFocus(id);
 });
 removeBtn.addEventListener("click", () => {
   if (items.selectedId) items.remove(items.selectedId);
@@ -255,6 +326,12 @@ removeBtn.addEventListener("click", () => {
 $("editDone").addEventListener("click", () => void invoke("finish_front_mode"));
 
 window.addEventListener("keydown", (e) => {
+  // Keys handled by the whiteboard or note (or typed into them) are not for us.
+  if (e.defaultPrevented || focusEditor.isOpen) return;
+  if (e.key === "Escape" && !addMenu.hidden) {
+    closeAddMenu();
+    return;
+  }
   if (e.key === "Escape" && mode !== "use") void invoke("finish_front_mode");
   if ((e.key === "Delete" || e.key === "Backspace") && mode === "edit" && items.selectedId) {
     items.remove(items.selectedId);
@@ -292,23 +369,98 @@ async function wireFileDrop(): Promise<void> {
   });
 }
 
-// ---------- Use mode: opening items ----------
+// ---------- Zoomed-in whiteboards and notes ----------
 
-function openItem(id: string): void {
+/** The mode to go back to when the zoomed-in whiteboard or note closes. */
+let focusReturn: Mode = "use";
+
+function openFocus(id: string): void {
   const item = items.find(id);
-  if (item) invoke("open_item", { path: item.path }).catch((e) => console.error(e));
+  if (!item || (item.kind !== "note" && item.kind !== "whiteboard")) return;
+  if (mode === "use") {
+    // Behind the desktop icons there is no keyboard: come to the front first.
+    void invoke("bring_to_front");
+    focusReturn = "use";
+  } else if (mode !== "focus") {
+    focusReturn = mode;
+  }
+  items.select(null);
+  mode = "focus";
+  document.body.dataset.mode = "focus";
+  editbar.hidden = true;
+  closeAddMenu();
+  const done: Parameters<FocusEditor["openNote"]>[3] = (result) => {
+    if (result?.kind === "note") items.update(result.id, { text: result.text, color: result.color });
+    else if (result) void items.refreshBoard(result.id);
+    refreshMirrorsSoon();
+    const back = focusReturn;
+    focusReturn = "use";
+    if (mode !== "focus") return; // switched to another mode from the tray
+    if (back === "use") {
+      void invoke("finish_front_mode");
+      setMode("use");
+    } else {
+      setMode(back);
+    }
+  };
+  if (item.kind === "note") focusEditor.openNote(id, item.text ?? "", item.color ?? "", done);
+  else void focusEditor.openBoard(id, done);
+}
+
+// ---------- Use mode: clicking items ----------
+
+function activate(id: string): void {
+  const item = items.find(id);
+  if (!item) return;
+  if (isFile(item.kind)) {
+    if (item.path) invoke("open_item", { path: item.path }).catch((e) => console.error(e));
+    return;
+  }
+  const flash = (cls: string, ms: number) => {
+    const target = items.element(id);
+    if (!target) return;
+    target.classList.remove(cls);
+    void target.offsetWidth; // restart the animation
+    target.classList.add(cls);
+    window.setTimeout(() => target.classList.remove(cls), ms);
+  };
+  switch (item.kind) {
+    case "plant":
+      items.update(id, { watered: Date.now() });
+      flash("watering", 1500);
+      break;
+    case "rose":
+    case "apple":
+      items.update(id, { since: Date.now() });
+      flash("fresh", 800);
+      break;
+    case "note":
+    case "whiteboard":
+      openFocus(id);
+      break;
+    default:
+      break; // pictures, stickers, clocks and mirrors just sit there
+  }
 }
 
 // Clicks behind the desktop icons arrive from the mouse watcher in Rust.
 void listen<{ monitor: number; id: string }>("item-activate", (e) => {
-  if (mode === "use" && e.payload.monitor === monitorIndex) openItem(e.payload.id);
+  if (mode === "use" && e.payload.monitor === monitorIndex) activate(e.payload.id);
 });
 // If the room couldn't get behind the icons, it is a normal window and gets clicks directly.
 document.addEventListener("click", (e) => {
   if (mode !== "use") return;
   const el = (e.target as HTMLElement).closest<HTMLElement>(".item");
-  if (el?.dataset.id) openItem(el.dataset.id);
+  if (el?.dataset.id) activate(el.dataset.id);
 });
+
+// Clocks tick, and the plant, rose and apple are redrawn as time passes.
+window.setInterval(() => tickClocks(surfaces.layer), 1000);
+window.setInterval(() => {
+  items.refreshAging();
+  refreshMirrorsSoon();
+}, 5 * 60 * 1000);
+window.setInterval(refreshMirrorsSoon, 30 * 1000);
 
 // ---------- Start ----------
 
@@ -330,7 +482,11 @@ window.addEventListener("DOMContentLoaded", async () => {
     await loadMonitorData();
     render();
   });
-  void listen<Mode>("mode", (e) => setMode(e.payload));
+  void listen<Mode>("mode", (e) => {
+    // "use" after a zoomed-in item closed is just the echo of finishing; nothing to do.
+    if (e.payload === "use" && mode === "use") return;
+    setMode(e.payload);
+  });
   void listen<boolean>("grid", (e) => {
     showGrid = e.payload;
     render();

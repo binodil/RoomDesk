@@ -61,7 +61,7 @@ fn current_monitors(app: &AppHandle) -> Vec<MonitorInfo> {
         .collect()
 }
 
-fn room_windows(app: &AppHandle) -> Vec<(usize, tauri::WebviewWindow)> {
+pub fn room_windows(app: &AppHandle) -> Vec<(usize, tauri::WebviewWindow)> {
     app.webview_windows()
         .into_iter()
         .filter_map(|(label, w)| {
@@ -205,6 +205,11 @@ pub fn set_front(app: &AppHandle, on: bool) {
         app.state::<RoomState>().paused.store(false, Ordering::SeqCst);
     }
     resync(app);
+}
+
+/// Whether the rooms are currently in front (editing, calibrating or a zoomed-in item).
+pub fn is_front(app: &AppHandle) -> bool {
+    app.state::<RoomState>().front.load(Ordering::SeqCst)
 }
 
 /// Show or hide every room window.

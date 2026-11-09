@@ -213,3 +213,233 @@ html, body {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }
+
+/* ---------- Add item menu ---------- */
+.menuwrap { position: relative; }
+.menu {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 250px;
+  padding: 6px;
+  border-radius: 10px;
+  background: var(--panel);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--line);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.toolbar .menu button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  background: transparent;
+  border-color: transparent;
+  font-weight: 500;
+}
+.toolbar .menu button:hover { background: rgba(255, 255, 255, 0.1); }
+.menu .ic { width: 20px; text-align: center; font-size: 16px; }
+.menu small { margin-left: auto; color: var(--ink-dim); font-size: 11px; }
+.menulabel { font-size: 11px; color: var(--ink-dim); padding: 8px 10px 4px; text-transform: uppercase; letter-spacing: 0.06em; }
+.stickers { display: flex; flex-wrap: wrap; gap: 4px; padding: 0 6px 6px; }
+.toolbar .stickers button { width: 36px; height: 36px; padding: 4px; justify-content: center; }
+.stickers svg { width: 100%; height: 100%; }
+
+/* ---------- Decor items ---------- */
+.item:not(.k-folder):not(.k-shortcut):not(.k-app):not(.k-file) { display: block; }
+.item svg { display: block; width: 100%; height: auto; overflow: visible; }
+
+.k-note .notetext {
+  aspect-ratio: 1;
+  box-sizing: border-box;
+  padding: 9% 10%;
+  background: linear-gradient(170deg, color-mix(in srgb, var(--note) 100%, white 25%), var(--note));
+  color: #3b3418;
+  font: 600 calc(var(--s) * 0.085)/1.25 "Segoe Print", "Ink Free", "Comic Sans MS", cursive;
+  white-space: pre-wrap;
+  overflow: hidden;
+  word-break: break-word;
+  box-shadow: 2px calc(var(--s) * 0.04) calc(var(--s) * 0.07) rgba(0, 0, 0, 0.35);
+}
+.k-note::before {
+  content: "";
+  position: absolute;
+  left: 34%;
+  right: 34%;
+  top: -5%;
+  height: 11%;
+  background: rgba(255, 255, 255, 0.5);
+  transform: rotate(-3deg);
+  z-index: 1;
+}
+.k-image .pic {
+  padding: 5%;
+  background: #2b2118;
+  box-shadow: 0 calc(var(--s) * 0.04) calc(var(--s) * 0.08) rgba(0, 0, 0, 0.45), inset 0 0 0 3px #4a3826;
+}
+.k-image .pic img { display: block; width: 100%; min-height: 40px; background: #f4f1ea; border: calc(var(--s) * 0.03) solid #f4f1ea; box-sizing: border-box; }
+.k-image.missing .pic img { aspect-ratio: 4 / 3; }
+.k-sticker svg { filter: drop-shadow(0 calc(var(--s) * 0.05) calc(var(--s) * 0.06) rgba(0, 0, 0, 0.35)); }
+.k-plant svg, .k-rose svg, .k-apple svg { filter: drop-shadow(0 calc(var(--s) * 0.03) calc(var(--s) * 0.04) rgba(0, 0, 0, 0.3)); }
+
+.clockface {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #ffffff, #efece5);
+  border: calc(var(--s) * 0.045) solid #2e2b27;
+  box-shadow: 0 calc(var(--s) * 0.05) calc(var(--s) * 0.1) rgba(0, 0, 0, 0.35);
+  box-sizing: border-box;
+}
+.clockface i {
+  position: absolute;
+  left: 50%;
+  top: 4%;
+  width: 3%;
+  height: 46%;
+  margin-left: -1.5%;
+  transform-origin: 50% 100%;
+}
+.clockface i::before { content: ""; display: block; height: 14%; background: #2e2b27; border-radius: 2px; }
+.clockface b {
+  position: absolute;
+  left: 50%;
+  bottom: 50%;
+  transform-origin: 50% 100%;
+  background: #2e2b27;
+  border-radius: 99px;
+}
+.clockface .hh { width: 5%; height: 26%; margin-left: -2.5%; }
+.clockface .mh { width: 3.5%; height: 38%; margin-left: -1.75%; }
+.clockface .sh { width: 1.5%; height: 42%; margin-left: -0.75%; background: #d6453d; }
+.clockface .pin { position: absolute; left: 50%; top: 50%; width: 8%; height: 8%; margin: -4% 0 0 -4%; border-radius: 50%; background: #d6453d; }
+
+/* Whiteboard */
+.wbframe {
+  background: #c9ccd1;
+  padding: 2.2%;
+  border-radius: 4px;
+  box-shadow: 0 calc(var(--s, 600px) * 0.03) calc(var(--s, 600px) * 0.05) rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+.wbsurf {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  background: #fbfbf8;
+  overflow: hidden;
+  container-type: inline-size;
+  touch-action: none;
+}
+.wbsurf .ink { position: absolute; inset: 0; width: 100%; height: 100%; }
+.wbtext {
+  position: absolute;
+  font: 700 3.4cqw/1.15 "Segoe Print", "Ink Free", "Comic Sans MS", cursive;
+  white-space: pre-wrap;
+  min-width: 2cqw;
+  outline: none;
+  z-index: 2;
+}
+.wbpic { position: absolute; z-index: 0; box-shadow: 0 0.4cqw 1cqw rgba(0, 0, 0, 0.25); border: 0.5cqw solid #fff; }
+.wbledge { height: calc(var(--s) * 0.03); margin: 0 8%; background: #a9adb3; border-radius: 0 0 4px 4px; }
+
+/* Mirror */
+.mframe {
+  position: relative;
+  aspect-ratio: 2 / 3;
+  overflow: hidden;
+  border: calc(var(--s) * 0.04) solid #b8964f;
+  border-radius: 50% 50% 6px 6px / 32% 32% 6px 6px;
+  background: #6f7b82;
+  box-shadow: 0 calc(var(--s) * 0.05) calc(var(--s) * 0.1) rgba(0, 0, 0, 0.4), inset 0 0 0 2px #7a5f2a;
+}
+.mscene { position: absolute; inset: 0; overflow: hidden; }
+.mroom {
+  position: absolute;
+  left: 0;
+  top: 0;
+  transform-origin: 0 0;
+  background-color: #1b1c1f;
+  background-position: center;
+  background-size: cover;
+  filter: saturate(0.92) brightness(0.96);
+}
+.mroom > div { position: absolute; inset: 0; }
+.mroom, .mroom * { pointer-events: none !important; }
+.mroom .item { outline: none !important; }
+.mglass {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(130deg, rgba(255, 255, 255, 0.26), transparent 35%, rgba(255, 255, 255, 0.1) 55%, transparent 62%), rgba(190, 215, 225, 0.1);
+}
+
+/* Feedback when clicked from the desktop */
+.k-plant .drops { opacity: 0; }
+.k-plant.watering .drops { animation: drops 1.4s ease-in; }
+@keyframes drops {
+  0% { opacity: 0; transform: translateY(-12px); }
+  25% { opacity: 1; }
+  100% { opacity: 0; transform: translateY(30px); }
+}
+.item.fresh { animation: fresh 0.7s ease-out; }
+@keyframes fresh {
+  from { opacity: 0; filter: brightness(1.6); }
+}
+[data-mode="use"] .item:hover > .notetext,
+[data-mode="use"] .k-whiteboard:hover .wbframe { filter: brightness(1.05); }
+
+/* ---------- Zoomed-in whiteboard or note ---------- */
+#focus {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: rgba(12, 14, 18, 0.72);
+  backdrop-filter: blur(6px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 16px 24px 24px;
+  box-sizing: border-box;
+}
+#focusBar { position: static; transform: none; max-width: calc(100vw - 48px); flex-wrap: wrap; justify-content: center; }
+.standing { position: absolute; inset: 0; }
+.standing .item { position: absolute; }
+#focus[data-kind="note"] .wb-only, #focus[data-kind="whiteboard"] .note-only { display: none; }
+#focusBar > span { display: contents; }
+#focusBar .sep { display: block; width: 1px; align-self: stretch; background: var(--line); margin: 0 4px; }
+#focusBar button[aria-pressed="true"] { background: var(--accent); color: #0b1a2c; }
+.sw { width: 26px; height: 26px; min-width: 26px; border-radius: 50% !important; border: 2px solid rgba(255, 255, 255, 0.5) !important; padding: 0 !important; }
+.sw[aria-pressed="true"] { outline: 3px solid var(--accent); outline-offset: 2px; }
+#focusBoard { width: min(100%, calc((100vh - 130px) * 1.55)); }
+#focusBoard .wbframe { padding: 1.2%; --s: 1200px; }
+.wbsurf.t-pen, .wbsurf.t-eraser { cursor: crosshair; }
+.wbsurf.t-text { cursor: text; }
+.wbsurf.t-move .ink { pointer-events: none; }
+.wbsurf.t-move .wbtext, .wbsurf.t-move .wbpic { cursor: move; }
+.wbsurf .wbtext:focus { outline: 2px dashed var(--accent); outline-offset: 4px; }
+.wbsurf .chosen { outline: 3px solid var(--accent); outline-offset: 3px; }
+#focusNote {
+  --note: #fde68a;
+  width: min(560px, calc(100vh - 160px), 100%);
+  aspect-ratio: 1;
+  background: var(--note);
+  box-shadow: 4px 14px 30px rgba(0, 0, 0, 0.45);
+  transform: rotate(-1deg);
+}
+#noteText {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 9% 10%;
+  border: 0;
+  outline: none;
+  resize: none;
+  background: transparent;
+  color: #3b3418;
+  font: 600 34px/1.3 "Segoe Print", "Ink Free", "Comic Sans MS", cursive;
+  user-select: text;
+}
