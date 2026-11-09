@@ -1,47 +1,77 @@
-import { availableMonitors, primaryMonitor } from "@tauri-apps/api/window";
+import { invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
+import { availableMonitors, currentMonitor, getCurrentWindow } from "@tauri-apps/api/window";
 
-// Step 1: prove the app works and show which monitors Tauri can see.
-// Multi-monitor support is built in from the start, so this list matters for step 2.
-async function showMonitors(): Promise<void> {
-  const body = document.getElementById("monitors");
-  if (!body) return;
+// Step 2: every monitor gets its own window like this one, showing the room photo.
+// The small bar at the top appears when you move the mouse and hides itself again.
 
+const photo = document.getElementById("photo") as HTMLDivElement;
+const bar = document.getElementById("bar") as HTMLDivElement;
+const info = document.getElementById("info") as HTMLSpanElement;
+
+const SAMPLE_ROOM = "/default-room.jpg";
+
+async function showPhoto(): Promise<void> {
+  let url = SAMPLE_ROOM;
   try {
-    const [monitors, primary] = await Promise.all([availableMonitors(), primaryMonitor()]);
-    if (monitors.length === 0) {
-      body.innerHTML = `<tr><td colspan="5">No monitors reported.</td></tr>`;
-      return;
-    }
-
-    body.innerHTML = "";
-    monitors.forEach((m, i) => {
-      const isPrimary = primary !== null && primary.name === m.name;
-      const row = document.createElement("tr");
-      const cells = [
-        String(i + 1),
-        (m.name ?? "Unknown") + (isPrimary ? " (main)" : ""),
-        `${m.size.width} × ${m.size.height}`,
-        `${Math.round(m.scaleFactor * 100)}%`,
-        `${m.position.x}, ${m.position.y}`,
-      ];
-      for (const text of cells) {
-        const td = document.createElement("td");
-        td.textContent = text;
-        row.appendChild(td);
-      }
-      body.appendChild(row);
-    });
+    url = (await invoke<string | null>("load_photo")) ?? SAMPLE_ROOM;
   } catch (err) {
-    body.innerHTML = "";
-    const row = document.createElement("tr");
-    const td = document.createElement("td");
-    td.colSpan = 5;
-    td.textContent = `Could not read monitors: ${String(err)}`;
-    row.appendChild(td);
-    body.appendChild(row);
+    console.error("Could not load the room photo:", err);
+  }
+  photo.style.backgroundImage = `url("${url}")`;
+}
+
+async function showMonitorInfo(): Promise<void> {
+  try {
+    const label = getCurrentWindow().label; // "room-0", "room-1", ...
+    const index = Number(label.replace("room-", "")) + 1;
+    const [here, all] = await Promise.all([currentMonitor(), availableMonitors()]);
+    const size = here ? `${here.size.width}×${here.size.height}` : "";
+    const scale = here ? `${Math.round(here.scaleFactor * 100)}%` : "";
+    info.textContent = `RoomDesk · Monitor ${index} of ${all.length} · ${size} · ${scale}`;
+  } catch {
+    info.textContent = "RoomDesk";
   }
 }
 
+// Show the bar on mouse movement, hide it after a few quiet seconds.
+let hideTimer: number | undefined;
+function revealBar(): void {
+  bar.classList.add("show");
+  window.clearTimeout(hideTimer);
+  hideTimer = window.setTimeout(() => {
+    if (!bar.matches(":hover")) bar.classList.remove("show");
+  }, 4000);
+}
+
+function wireButtons(): void {
+  document.getElementById("choose")?.addEventListener("click", () => {
+    invoke<boolean>("choose_photo").catch((err) => alertInBar(String(err)));
+  });
+  document.getElementById("reset")?.addEventListener("click", () => {
+    invoke("reset_photo").catch((err) => alertInBar(String(err)));
+  });
+  document.getElementById("exit")?.addEventListener("click", () => void invoke("quit"));
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") void invoke("quit");
+  });
+  window.addEventListener("mousemove", revealBar);
+  bar.addEventListener("mouseleave", revealBar);
+}
+
+function alertInBar(message: string): void {
+  info.textContent = message;
+  revealBar();
+}
+
 window.addEventListener("DOMContentLoaded", () => {
-  void showMonitors();
+  wireButtons();
+  void showPhoto();
+  void showMonitorInfo();
+  revealBar();
+  // Another monitor's window changed the photo: reload it here too.
+  void listen("photo-changed", () => void showPhoto());
+  // Moved to a different monitor or the scaling changed: refresh the label.
+  void getCurrentWindow().onScaleChanged(() => void showMonitorInfo());
+  void getCurrentWindow().onMoved(() => void showMonitorInfo());
 });

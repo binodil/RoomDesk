@@ -1,20 +1,82 @@
 :root {
   font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
-  color: #1f2328;
-  background: #f4f5f2;
-  color-scheme: light dark;
+  color-scheme: dark;
 }
-@media (prefers-color-scheme: dark) {
-  :root { color: #e8e6e1; background: #1b1c1f; }
-  th { background: #2a2c31 !important; }
-  td, th { border-color: #3a3d44 !important; }
+html, body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: #1b1c1f;
+  user-select: none;
 }
-body { margin: 0; }
-main { max-width: 760px; margin: 0 auto; padding: 32px 24px; }
-h1 { margin: 0 0 8px; font-size: 26px; }
-h2 { margin: 28px 0 4px; font-size: 18px; }
-.ok { color: #1f8a55; font-weight: 600; margin: 0; }
-.hint { margin: 0 0 12px; opacity: .7; }
-table { width: 100%; border-collapse: collapse; font-size: 14px; font-variant-numeric: tabular-nums; }
-th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #d8dad3; }
-th { background: #e9eae5; font-weight: 600; }
+
+/* The room photo fills the whole monitor without stretching. */
+#photo {
+  position: fixed;
+  inset: 0;
+  background-color: #1b1c1f;
+  background-position: center;
+  background-size: cover;
+  background-repeat: no-repeat;
+}
+
+/* Small control bar, top center. Hidden until the mouse moves. */
+.bar {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translate(-50%, -12px);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px 8px 14px;
+  border-radius: 10px;
+  background: rgba(28, 30, 34, 0.88);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.4);
+  color: #f3f1ec;
+  font-size: 13px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s, transform 0.2s;
+}
+.bar.show {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translate(-50%, 0);
+}
+.info {
+  margin-right: 6px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.hint {
+  color: #b9b5ad;
+  font-size: 12px;
+  margin-left: 4px;
+  white-space: nowrap;
+}
+button {
+  font: 600 13px inherit;
+  font-family: inherit;
+  color: #f3f1ec;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+button:hover {
+  background: rgba(255, 255, 255, 0.16);
+}
+button:focus-visible {
+  outline: 2px solid #6fb1ff;
+  outline-offset: 2px;
+}
+#choose {
+  background: #6fb1ff;
+  color: #0b1a2c;
+  border-color: transparent;
+}
