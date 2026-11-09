@@ -10,14 +10,25 @@
   <body>
     <div id="photo" role="img" aria-label="Room photo"></div>
 
-    <!-- One perspective-correct test grid per surface of the room. -->
+    <!-- The five surfaces of the room, each with its test grid and its items. -->
     <div id="surfaces"></div>
+
+    <!-- Edit mode: add, move, resize and remove items. -->
+    <div id="editbar" class="toolbar" role="toolbar" aria-label="Edit items" hidden>
+      <div class="caltext">
+        <strong id="editTitle">Edit items</strong>
+        <span>Drag files, folders or shortcuts from File Explorer onto a wall or the floor. Drag items to move them, even onto another surface. Scroll over an item to resize it. Delete removes it.</span>
+      </div>
+      <button id="editAdd" type="button">Add files…</button>
+      <button id="editRemove" type="button" disabled>Remove</button>
+      <button id="editDone" type="button" class="primary">Done</button>
+    </div>
 
     <!-- Calibrate mode: outlines, 8 draggable corner points and a small toolbar. -->
     <div id="editor" hidden>
       <svg id="outlines" aria-hidden="true"></svg>
       <div id="handles"></div>
-      <div id="calbar" role="toolbar" aria-label="Calibration">
+      <div id="calbar" class="toolbar" role="toolbar" aria-label="Calibration">
         <div class="caltext">
           <strong id="calTitle">Calibrate this monitor</strong>
           <span>Drag the 4 inner points onto the corners of the back wall, and the 4 outer points to where the walls, floor and ceiling leave the photo. The grids follow live.</span>

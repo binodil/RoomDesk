@@ -36,9 +36,11 @@ html, body {
   position: absolute;
   left: 0;
   top: 0;
-  width: 1000px;
-  height: 1000px;
   transform-origin: 0 0;
+}
+.surface .grid {
+  position: absolute;
+  inset: 0;
   box-sizing: border-box;
   border: 6px solid var(--c);
   background-image:
@@ -50,7 +52,8 @@ html, body {
   display: grid;
   place-items: center;
 }
-.surface span {
+.no-grid .grid { display: none; }
+.surface .grid span {
   font: 600 90px/1 "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
   color: #fff;
   background: var(--c);
@@ -58,6 +61,56 @@ html, body {
   border-radius: 14px;
   opacity: 0.9;
 }
+.surface .items {
+  position: absolute;
+  inset: 0;
+}
+.surface.drop-target .grid,
+[data-mode="edit"] .surface.drop-target::after {
+  display: grid;
+}
+[data-mode="edit"] .surface.drop-target::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 10px solid #6fb1ff;
+  background: rgba(111, 177, 255, 0.15);
+}
+
+/* ---------- Items ---------- */
+.item {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: auto;
+  cursor: default;
+}
+.item img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: contain;
+  filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.45));
+}
+.item .name {
+  margin-top: 4%;
+  max-width: 160%;
+  font: 500 var(--label)/1.2 "Segoe UI", system-ui, sans-serif;
+  color: #fff;
+  text-align: center;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9), 0 0 8px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  word-break: break-word;
+}
+[data-mode="use"] .item:hover img { filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.45)) brightness(1.1); }
+[data-mode="edit"] .item { cursor: grab; outline: 3px dashed rgba(255, 255, 255, 0.6); outline-offset: 8px; }
+[data-mode="edit"] .item.selected { outline: 5px solid #6fb1ff; }
+[data-mode="edit"] .item:active { cursor: grabbing; }
+[data-mode="calibrate"] .items { opacity: 0.35; }
+
 .surface-back    { --c: rgba(111, 177, 255, 0.75); --fill: rgba(111, 177, 255, 0.08); }
 .surface-left    { --c: rgba(80, 200, 160, 0.75);  --fill: rgba(80, 200, 160, 0.08); }
 .surface-right   { --c: rgba(80, 200, 160, 0.75);  --fill: rgba(80, 200, 160, 0.08); }
@@ -112,10 +165,10 @@ html, body {
   outline: 3px solid #fff;
   outline-offset: 4px;
 }
-#calbar {
-  position: absolute;
+.toolbar {
+  position: fixed;
   left: 50%;
-  bottom: 70px;
+  top: 24px;
   transform: translateX(-50%);
   display: flex;
   align-items: center;
@@ -139,7 +192,7 @@ html, body {
 }
 .caltext span { color: var(--ink-dim); }
 .caltext strong { font-size: 14px; }
-#calbar button {
+.toolbar button {
   font: 600 13px "Segoe UI", system-ui, sans-serif;
   color: var(--ink);
   background: rgba(255, 255, 255, 0.08);
@@ -149,13 +202,14 @@ html, body {
   cursor: pointer;
   white-space: nowrap;
 }
-#calbar button:hover { background: rgba(255, 255, 255, 0.16); }
-#calbar button.primary {
+.toolbar button:hover { background: rgba(255, 255, 255, 0.16); }
+.toolbar button.primary {
   background: var(--accent);
   color: #0b1a2c;
   border-color: transparent;
 }
-#calbar button:focus-visible {
+.toolbar button:disabled { opacity: 0.45; cursor: default; }
+.toolbar button:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
 }

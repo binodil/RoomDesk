@@ -53,6 +53,29 @@ export function rectToQuad(width: number, height: number, quad: Quad): number[] 
   return h ? [...h, 1] : null;
 }
 
+/** Apply a homography to a point. */
+export function apply(h: number[], p: Point): Point {
+  const [a, b, c, d, e, f, g, hh, i] = h;
+  const w = g * p.x + hh * p.y + i;
+  return { x: (a * p.x + b * p.y + c) / w, y: (d * p.x + e * p.y + f) / w };
+}
+
+/** The opposite mapping (screen → flat rectangle), or null if it can't be undone. */
+export function invert(h: number[]): number[] | null {
+  const [a, b, c, d, e, f, g, hh, i] = h;
+  const A = e * i - f * hh;
+  const B = -(d * i - f * g);
+  const C = d * hh - e * g;
+  const det = a * A + b * B + c * C;
+  if (Math.abs(det) < 1e-12) return null;
+  const inv = [
+    A, -(b * i - c * hh), b * f - c * e,
+    B, a * i - c * g, -(a * f - c * d),
+    C, -(a * hh - b * g), a * e - b * d,
+  ];
+  return inv.map((v) => v / det);
+}
+
 /** The CSS `matrix3d(...)` for a homography (use with `transform-origin: 0 0`). */
 export function toMatrix3d(h: number[]): string {
   const [a, b, c, d, e, f, g, hh, i] = h;

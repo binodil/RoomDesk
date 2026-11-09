@@ -3,17 +3,20 @@
 //! Milestone 1: one room window per monitor, attached to the desktop's wallpaper
 //! layer (behind your windows and desktop icons), controlled from a tray icon.
 
+mod icons;
+mod input;
 mod monitors;
 mod settings;
 mod tray;
 mod wallpaper;
 
-use std::fs;
+use std::{collections::HashMap, fs, sync::Mutex};
 
 use base64::{engine::general_purpose::STANDARD, Engine};
 use serde_json::Value;
-use tauri::{AppHandle, Emitter, RunEvent};
+use tauri::{AppHandle, Emitter, Manager, RunEvent, WebviewWindow};
 use tauri_plugin_dialog::DialogExt;
+use tauri_plugin_opener::OpenerExt;
 
 /// The chosen room photo as a data URL, or `None` to use the built-in sample room.
 #[tauri::command]
@@ -88,17 +91,87 @@ fn show_grid(app: AppHandle) -> bool {
     settings::load(&app).show_grid
 }
 
-/// Leave calibrate mode on every monitor and put the rooms back behind the icons.
+/// Leave edit or calibrate mode on every monitor and put the rooms back behind the icons.
 #[tauri::command]
-fn finish_calibration(app: AppHandle) {
-    monitors::set_calibrating(&app, false);
-    let _ = app.emit("calibrate", false);
+fn finish_front_mode(app: AppHandle) {
+    monitors::set_front(&app, false);
+    let _ = app.emit("mode", "use");
 }
 
-/// Bring the rooms to the front with draggable corners.
-pub(crate) fn start_calibration(app: &AppHandle) {
-    monitors::set_calibrating(app, true);
-    let _ = app.emit("calibrate", true);
+/// Bring the rooms to the front, in "edit" (items) or "calibrate" (corners) mode.
+pub(crate) fn start_front_mode(app: &AppHandle, mode: &str) {
+    monitors::set_front(app, true);
+    let _ = app.emit("mode", mode);
+}
+
+/// The saved items for one monitor, if any.
+#[tauri::command]
+fn load_layout(app: AppHandle, monitor: String) -> Option<Value> {
+    settings::load(&app).layouts.get(&monitor).cloned()
+}
+
+/// Save the items for one monitor.
+#[tauri::command]
+fn save_layout(app: AppHandle, monitor: String, layout: Value) -> Result<(), String> {
+    let mut current = settings::load(&app);
+    current.layouts.insert(monitor, layout);
+    settings::save(&app, &current)
+}
+
+/// Name and kind (folder, shortcut, app, file) for each dropped or picked path.
+#[tauri::command]
+fn describe_paths(paths: Vec<String>) -> Vec<icons::ItemInfo> {
+    paths.iter().map(|p| icons::describe(p)).collect()
+}
+
+/// Let the user pick files to add to the room (the file picker in edit mode).
+#[tauri::command]
+async fn pick_items(app: AppHandle) -> Vec<icons::ItemInfo> {
+    let picked = app.dialog().file().set_title("Add files or shortcuts to the room").blocking_pick_files();
+    picked
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|f| f.into_path().ok())
+        .map(|p| icons::describe(&p.to_string_lossy()))
+        .collect()
+}
+
+/// Icons are cached so every room window (and every redraw) doesn't ask Windows again.
+#[derive(Default)]
+struct IconCache(Mutex<HashMap<String, String>>);
+
+/// The Windows icon or thumbnail for a path, as a PNG data URL.
+#[tauri::command]
+async fn item_icon(app: AppHandle, path: String) -> Result<String, String> {
+    let cache = app.state::<IconCache>();
+    if let Some(hit) = cache.0.lock().map_err(|e| e.to_string())?.get(&path) {
+        return Ok(hit.clone());
+    }
+    let p = path.clone();
+    let png = tauri::async_runtime::spawn_blocking(move || icons::icon_png(&p, 256))
+        .await
+        .map_err(|e| e.to_string())??;
+    let url = format!("data:image/png;base64,{}", STANDARD.encode(png));
+    cache.0.lock().map_err(|e| e.to_string())?.insert(path, url.clone());
+    Ok(url)
+}
+
+/// Open a file or folder, or start a program or shortcut, the way double-clicking it on the desktop would.
+#[tauri::command]
+fn open_item(app: AppHandle, path: String) -> Result<(), String> {
+    app.opener().open_path(path, None::<&str>).map_err(|e| e.to_string())
+}
+
+/// Where this room's items are on screen, so clicks behind the desktop icons can reach them.
+#[tauri::command]
+fn set_hit_regions(window: WebviewWindow, regions: Vec<input::Region>) {
+    if let Some(index) = window
+        .label()
+        .strip_prefix(monitors::LABEL_PREFIX)
+        .and_then(|n| n.parse::<usize>().ok())
+    {
+        input::set_regions(index, regions);
+    }
 }
 
 pub(crate) fn set_show_grid(app: &AppHandle, show: bool) {
@@ -120,16 +193,26 @@ fn restore_desktop() {
 pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
+        .manage(IconCache::default())
         .invoke_handler(tauri::generate_handler![
             load_photo,
             load_calibration,
             save_calibration,
             show_grid,
-            finish_calibration
+            finish_front_mode,
+            load_layout,
+            save_layout,
+            describe_paths,
+            pick_items,
+            item_icon,
+            open_item,
+            set_hit_regions
         ])
         .setup(|app| {
             let handle = app.handle();
             tray::create(handle)?;
+            input::start(handle);
             monitors::start(handle);
             if settings::load(handle).hide_icons {
                 wallpaper::set_desktop_icons_visible(false);
