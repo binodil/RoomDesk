@@ -126,8 +126,19 @@ fn describe_paths(paths: Vec<String>) -> Vec<icons::ItemInfo> {
 
 /// Let the user pick files to add to the room (the file picker in edit mode).
 #[tauri::command]
-async fn pick_items(app: AppHandle) -> Vec<icons::ItemInfo> {
-    let picked = app.dialog().file().set_title("Add files or shortcuts to the room").blocking_pick_files();
+async fn pick_items(app: AppHandle, window: WebviewWindow) -> Vec<icons::ItemInfo> {
+    // The room sits always-on-top while editing, which would cover the picker.
+    // Let it drop back while the picker is open, and make the picker its child
+    // so Windows keeps the picker above it.
+    let _ = window.set_always_on_top(false);
+    let picked = app
+        .dialog()
+        .file()
+        .set_title("Add files or shortcuts to the room")
+        .set_parent(&window)
+        .blocking_pick_files();
+    let _ = window.set_always_on_top(true);
+    let _ = window.set_focus();
     picked
         .unwrap_or_default()
         .into_iter()
