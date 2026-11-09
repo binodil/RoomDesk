@@ -28,6 +28,8 @@ pub const LABEL_PREFIX: &str = "room-";
 #[derive(Default)]
 pub struct RoomState {
     pub paused: AtomicBool,
+    /// While calibrating, the rooms are normal windows in front so they can be edited.
+    pub calibrating: AtomicBool,
     /// True when every room window made it into the wallpaper layer at the last sync.
     all_attached: AtomicBool,
     /// Serialises syncs so the timer and the tray never rebuild windows at the same time.
@@ -75,6 +77,7 @@ fn sync_windows(app: &AppHandle, monitors: &[MonitorInfo]) {
     let state = app.state::<RoomState>();
     let _guard = state.sync_lock.lock().unwrap_or_else(|e| e.into_inner());
     let paused = state.paused.load(Ordering::SeqCst);
+    let calibrating = state.calibrating.load(Ordering::SeqCst);
 
     // Close windows for monitors that are gone.
     for (i, window) in room_windows(app) {
@@ -120,6 +123,13 @@ fn sync_windows(app: &AppHandle, monitors: &[MonitorInfo]) {
         // inside Explorer's desktop, so switch it off before attaching, and back on
         // only if attaching fails.
         let _ = window.set_always_on_bottom(false);
+        if calibrating {
+            wallpaper::detach(&window, m.x, m.y, m.width, m.height);
+            let _ = window.set_always_on_top(true);
+            let _ = window.set_focus();
+            continue;
+        }
+        let _ = window.set_always_on_top(false);
         let mode = wallpaper::attach(&window, m.x, m.y, m.width, m.height);
         if matches!(mode, Mode::Fallback(_)) {
             let _ = window.set_always_on_bottom(true);
@@ -128,6 +138,11 @@ fn sync_windows(app: &AppHandle, monitors: &[MonitorInfo]) {
             let _ = window.hide();
         }
         modes.push(mode);
+    }
+
+    if calibrating {
+        crate::tray::set_info(app, "Room: calibrating", "Drag the corners, then press Finish");
+        return;
     }
 
     let all_attached = !modes.is_empty() && modes.iter().all(|m| !matches!(m, Mode::Fallback(_)));
@@ -155,13 +170,32 @@ fn needs_repair(app: &AppHandle, expected: usize) -> bool {
         return true;
     }
     let state = app.state::<RoomState>();
+    if state.calibrating.load(Ordering::SeqCst) {
+        return false;
+    }
     state.all_attached.load(Ordering::SeqCst) && windows.iter().any(|(_, w)| !wallpaper::is_attached(w))
 }
 
-/// Rebuild all room windows now (used by the tray, for example after resuming).
+/// Rebuild all room windows soon (used by the tray, for example after resuming).
+///
+/// Runs on a background thread: window calls made under `sync_lock` wait for the
+/// main thread, so the main thread itself must never wait for that lock.
 pub fn resync(app: &AppHandle) {
-    let monitors = current_monitors(app);
-    sync_windows(app, &monitors);
+    let app = app.clone();
+    thread::spawn(move || {
+        let monitors = current_monitors(&app);
+        sync_windows(&app, &monitors);
+    });
+}
+
+/// Start or stop calibrate mode. While calibrating, the rooms come to the front
+/// (out of the desktop) so they can be clicked; afterwards they go back behind the icons.
+pub fn set_calibrating(app: &AppHandle, on: bool) {
+    app.state::<RoomState>().calibrating.store(on, Ordering::SeqCst);
+    if on {
+        app.state::<RoomState>().paused.store(false, Ordering::SeqCst);
+    }
+    resync(app);
 }
 
 /// Show or hide every room window.

@@ -9,5 +9,22 @@
   </head>
   <body>
     <div id="photo" role="img" aria-label="Room photo"></div>
+
+    <!-- One perspective-correct test grid per surface of the room. -->
+    <div id="surfaces"></div>
+
+    <!-- Calibrate mode: outlines, 8 draggable corner points and a small toolbar. -->
+    <div id="editor" hidden>
+      <svg id="outlines" aria-hidden="true"></svg>
+      <div id="handles"></div>
+      <div id="calbar" role="toolbar" aria-label="Calibration">
+        <div class="caltext">
+          <strong id="calTitle">Calibrate this monitor</strong>
+          <span>Drag the 4 inner points onto the corners of the back wall, and the 4 outer points to where the walls, floor and ceiling leave the photo. The grids follow live.</span>
+        </div>
+        <button id="calReset" type="button">Reset</button>
+        <button id="calFinish" type="button" class="primary">Finish</button>
+      </div>
+    </div>
   </body>
 </html>

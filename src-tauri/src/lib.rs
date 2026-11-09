@@ -11,6 +11,7 @@ mod wallpaper;
 use std::fs;
 
 use base64::{engine::general_purpose::STANDARD, Engine};
+use serde_json::Value;
 use tauri::{AppHandle, Emitter, RunEvent};
 use tauri_plugin_dialog::DialogExt;
 
@@ -49,6 +50,8 @@ pub(crate) fn pick_photo(app: &AppHandle) -> Result<bool, String> {
 
     let mut current = settings::load(app);
     current.photo = Some(path);
+    // Corners marked on the old photo don't fit a new one.
+    current.calibrations.clear();
     settings::save(app, &current)?;
 
     // Tell every room window (one per monitor) to reload the photo.
@@ -60,8 +63,51 @@ pub(crate) fn pick_photo(app: &AppHandle) -> Result<bool, String> {
 pub(crate) fn use_sample_room(app: &AppHandle) -> Result<(), String> {
     let mut current = settings::load(app);
     current.photo = None;
+    current.calibrations.clear();
     settings::save(app, &current)?;
     app.emit("photo-changed", ()).map_err(|e| e.to_string())
+}
+
+/// The saved calibration for one monitor, if any.
+#[tauri::command]
+fn load_calibration(app: AppHandle, monitor: String) -> Option<Value> {
+    settings::load(&app).calibrations.get(&monitor).cloned()
+}
+
+/// Save the calibration for one monitor (called after every corner drag).
+#[tauri::command]
+fn save_calibration(app: AppHandle, monitor: String, calibration: Value) -> Result<(), String> {
+    let mut current = settings::load(&app);
+    current.calibrations.insert(monitor, calibration);
+    settings::save(&app, &current)
+}
+
+/// Whether the perspective test grid is switched on.
+#[tauri::command]
+fn show_grid(app: AppHandle) -> bool {
+    settings::load(&app).show_grid
+}
+
+/// Leave calibrate mode on every monitor and put the rooms back behind the icons.
+#[tauri::command]
+fn finish_calibration(app: AppHandle) {
+    monitors::set_calibrating(&app, false);
+    let _ = app.emit("calibrate", false);
+}
+
+/// Bring the rooms to the front with draggable corners.
+pub(crate) fn start_calibration(app: &AppHandle) {
+    monitors::set_calibrating(app, true);
+    let _ = app.emit("calibrate", true);
+}
+
+pub(crate) fn set_show_grid(app: &AppHandle, show: bool) {
+    let mut s = settings::load(app);
+    s.show_grid = show;
+    if let Err(e) = settings::save(app, &s) {
+        eprintln!("RoomDesk: {e}");
+    }
+    let _ = app.emit("grid", show);
 }
 
 /// Put the normal desktop back the way it was.
@@ -74,7 +120,13 @@ fn restore_desktop() {
 pub fn run() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![load_photo])
+        .invoke_handler(tauri::generate_handler![
+            load_photo,
+            load_calibration,
+            save_calibration,
+            show_grid,
+            finish_calibration
+        ])
         .setup(|app| {
             let handle = app.handle();
             tray::create(handle)?;
