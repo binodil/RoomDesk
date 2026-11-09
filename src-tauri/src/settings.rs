@@ -1,18 +1,35 @@
 //! Settings saved as JSON in the user's app-data folder
 //! (%APPDATA%\RoomDesk\settings.json on Windows).
 
-use std::{fs, path::PathBuf};
+use std::{collections::HashMap, fs, path::PathBuf};
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+fn yes() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
     /// The room photo the user picked. `None` means "use the built-in sample room".
     pub photo: Option<PathBuf>,
     /// Hide the normal Windows desktop icons while RoomDesk runs.
     #[serde(default)]
     pub hide_icons: bool,
+    /// Show the perspective test grid on each surface of the room.
+    #[serde(default = "yes")]
+    pub show_grid: bool,
+    /// Room calibration for each monitor (key: monitor name and resolution).
+    /// The page decides the format; Rust only stores it.
+    #[serde(default)]
+    pub calibrations: HashMap<String, serde_json::Value>,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self { photo: None, hide_icons: false, show_grid: true, calibrations: HashMap::new() }
+    }
 }
 
 /// The RoomDesk data folder, created if it does not exist yet.

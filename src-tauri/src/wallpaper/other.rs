@@ -14,3 +14,5 @@ pub fn is_attached(_window: &WebviewWindow) -> bool {
 pub fn set_desktop_icons_visible(_visible: bool) {}
 
 pub fn refresh_wallpaper() {}
+
+pub fn detach(_window: &WebviewWindow, _x: i32, _y: i32, _w: u32, _h: u32) {}

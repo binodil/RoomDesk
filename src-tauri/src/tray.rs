@@ -22,6 +22,8 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
     let screens = MenuItem::with_id(app, "monitors", "Monitors: …", false, None::<&str>)?;
     let choose = MenuItem::with_id(app, "choose", "Choose room photo…", true, None::<&str>)?;
     let sample = MenuItem::with_id(app, "sample", "Use sample room", true, None::<&str>)?;
+    let calibrate = MenuItem::with_id(app, "calibrate", "Calibrate room…", true, None::<&str>)?;
+    let grid = CheckMenuItem::with_id(app, "grid", "Show test grid", true, saved.show_grid, None::<&str>)?;
     let pause = CheckMenuItem::with_id(app, "pause", "Pause", true, false, None::<&str>)?;
     let hide_icons =
         CheckMenuItem::with_id(app, "hide_icons", "Hide desktop icons", true, saved.hide_icons, None::<&str>)?;
@@ -32,6 +34,8 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
         .separator()
         .items(&[&choose, &sample])
         .separator()
+        .items(&[&calibrate, &grid])
+        .separator()
         .items(&[&pause, &hide_icons])
         .separator()
         .item(&exit)
@@ -39,6 +43,7 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
 
     let pause_item = pause.clone();
     let hide_item = hide_icons.clone();
+    let grid_item = grid.clone();
     let icon = app
         .default_window_icon()
         .cloned()
@@ -63,6 +68,11 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
                 if let Err(e) = crate::use_sample_room(app) {
                     eprintln!("RoomDesk: {e}");
                 }
+            }
+            "calibrate" => crate::start_calibration(app),
+            "grid" => {
+                let show = grid_item.is_checked().unwrap_or(true);
+                crate::set_show_grid(app, show);
             }
             "pause" => {
                 let paused = pause_item.is_checked().unwrap_or(false);

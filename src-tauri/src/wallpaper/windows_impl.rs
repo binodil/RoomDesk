@@ -142,6 +142,21 @@ pub fn attach(window: &WebviewWindow, x: i32, y: i32, w: u32, h: u32) -> Mode {
     Mode::Fallback("Explorer's wallpaper window not found".into())
 }
 
+/// Take the window back out of the desktop, as a normal top-level window placed
+/// over the monitor at (`x`, `y`) with size `w` × `h` (used while calibrating).
+pub fn detach(window: &WebviewWindow, x: i32, y: i32, w: u32, h: u32) {
+    let Some(hwnd) = hwnd_of(window) else { return };
+    unsafe {
+        let _ = SetParent(hwnd, None);
+        let style = GetWindowLongPtrW(hwnd, GWL_STYLE);
+        let style = (style & !(WS_CHILD.0 as isize)) | WS_POPUP.0 as isize;
+        SetWindowLongPtrW(hwnd, GWL_STYLE, style);
+        let ex = GetWindowLongPtrW(hwnd, GWL_EXSTYLE) & !(WS_EX_LAYERED.0 as isize);
+        SetWindowLongPtrW(hwnd, GWL_EXSTYLE, ex);
+        let _ = SetWindowPos(hwnd, None, x, y, w as i32, h as i32, SWP_SHOWWINDOW);
+    }
+}
+
 /// Still a child of a living Explorer window? (False after Explorer restarts.)
 pub fn is_attached(window: &WebviewWindow) -> bool {
     let Some(hwnd) = hwnd_of(window) else { return false };

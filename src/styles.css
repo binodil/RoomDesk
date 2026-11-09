@@ -1,3 +1,12 @@
+:root {
+  font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  color-scheme: dark;
+  --accent: #6fb1ff;
+  --panel: rgba(28, 30, 34, 0.9);
+  --line: rgba(255, 255, 255, 0.12);
+  --ink: #f3f1ec;
+  --ink-dim: #b9b5ad;
+}
 html, body {
   margin: 0;
   height: 100%;
@@ -5,6 +14,7 @@ html, body {
   background: #1b1c1f;
   user-select: none;
 }
+[hidden] { display: none !important; }
 
 /* The room photo fills the whole monitor without stretching. */
 #photo {
@@ -14,4 +24,138 @@ html, body {
   background-position: center;
   background-size: cover;
   background-repeat: no-repeat;
+}
+
+/* ---------- Perspective test grids ---------- */
+#surfaces {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+}
+.surface {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1000px;
+  height: 1000px;
+  transform-origin: 0 0;
+  box-sizing: border-box;
+  border: 6px solid var(--c);
+  background-image:
+    linear-gradient(var(--c) 3px, transparent 3px),
+    linear-gradient(90deg, var(--c) 3px, transparent 3px);
+  background-size: 100px 100px;
+  background-position: -1.5px -1.5px;
+  background-color: var(--fill);
+  display: grid;
+  place-items: center;
+}
+.surface span {
+  font: 600 90px/1 "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+  color: #fff;
+  background: var(--c);
+  padding: 14px 34px;
+  border-radius: 14px;
+  opacity: 0.9;
+}
+.surface-back    { --c: rgba(111, 177, 255, 0.75); --fill: rgba(111, 177, 255, 0.08); }
+.surface-left    { --c: rgba(80, 200, 160, 0.75);  --fill: rgba(80, 200, 160, 0.08); }
+.surface-right   { --c: rgba(80, 200, 160, 0.75);  --fill: rgba(80, 200, 160, 0.08); }
+.surface-floor   { --c: rgba(255, 170, 90, 0.8);   --fill: rgba(255, 170, 90, 0.08); }
+.surface-ceiling { --c: rgba(190, 140, 255, 0.75); --fill: rgba(190, 140, 255, 0.08); }
+
+/* ---------- Calibrate mode ---------- */
+#editor {
+  position: fixed;
+  inset: 0;
+}
+#outlines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+#outlines polygon {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 2;
+  stroke-dasharray: 8 6;
+}
+#outlines polygon.bad {
+  stroke: #ff6b6b;
+  stroke-width: 3;
+}
+.handle {
+  position: absolute;
+  width: 30px;
+  height: 30px;
+  margin: -15px 0 0 -15px;
+  border-radius: 50%;
+  border: 3px solid #fff;
+  background: var(--accent);
+  box-shadow: 0 0 0 5px rgba(111, 177, 255, 0.35), 0 4px 10px rgba(0, 0, 0, 0.5);
+  cursor: grab;
+  padding: 0;
+  touch-action: none;
+}
+.handle.outer {
+  background: #ffb15c;
+  box-shadow: 0 0 0 5px rgba(255, 177, 92, 0.35), 0 4px 10px rgba(0, 0, 0, 0.5);
+}
+.handle.active,
+.handle:active {
+  cursor: grabbing;
+  transform: scale(1.2);
+}
+.handle:focus-visible {
+  outline: 3px solid #fff;
+  outline-offset: 4px;
+}
+#calbar {
+  position: absolute;
+  left: 50%;
+  bottom: 70px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  max-width: min(760px, calc(100vw - 32px));
+  padding: 12px 14px 12px 16px;
+  border-radius: 12px;
+  background: var(--panel);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--line);
+  box-shadow: 0 14px 34px rgba(0, 0, 0, 0.45);
+  color: var(--ink);
+}
+.caltext {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 13px;
+  line-height: 1.4;
+  margin-right: 6px;
+}
+.caltext span { color: var(--ink-dim); }
+.caltext strong { font-size: 14px; }
+#calbar button {
+  font: 600 13px "Segoe UI", system-ui, sans-serif;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  padding: 8px 14px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+#calbar button:hover { background: rgba(255, 255, 255, 0.16); }
+#calbar button.primary {
+  background: var(--accent);
+  color: #0b1a2c;
+  border-color: transparent;
+}
+#calbar button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
