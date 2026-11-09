@@ -1,16 +1,38 @@
 //! One room window per monitor.
 //!
 //! Each window covers exactly one monitor, using that monitor's real pixel size,
-//! so every screen is sharp at its own scaling (100%, 125%, 150% ...).
-//! A background check notices when monitors are plugged in, unplugged, rearranged
-//! or rescaled, and rebuilds the windows to match.
+//! so every screen is sharp at its own scaling (100%, 125%, 150% ...), and is
+//! attached to the desktop's wallpaper layer (see `wallpaper`).
+//!
+//! A background check every 2 seconds notices when monitors are plugged in,
+//! unplugged, rearranged or rescaled, or when Explorer restarts, and rebuilds
+//! the windows to match.
 
-use std::{thread, time::Duration};
+use std::{
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Mutex,
+    },
+    thread,
+    time::Duration,
+};
 
 use tauri::{AppHandle, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindowBuilder};
 
+use crate::wallpaper::{self, Mode};
+
 /// Window labels look like "room-0", "room-1", ... (one per monitor, in Windows' order).
 pub const LABEL_PREFIX: &str = "room-";
+
+/// Shared state about the room windows.
+#[derive(Default)]
+pub struct RoomState {
+    pub paused: AtomicBool,
+    /// True when every room window made it into the wallpaper layer at the last sync.
+    all_attached: AtomicBool,
+    /// Serialises syncs so the timer and the tray never rebuild windows at the same time.
+    sync_lock: Mutex<()>,
+}
 
 #[derive(Debug, Clone, PartialEq)]
 struct MonitorInfo {
@@ -36,21 +58,32 @@ fn current_monitors(app: &AppHandle) -> Vec<MonitorInfo> {
         .collect()
 }
 
+fn room_windows(app: &AppHandle) -> Vec<(usize, tauri::WebviewWindow)> {
+    app.webview_windows()
+        .into_iter()
+        .filter_map(|(label, w)| {
+            label
+                .strip_prefix(LABEL_PREFIX)
+                .and_then(|n| n.parse::<usize>().ok())
+                .map(|i| (i, w))
+        })
+        .collect()
+}
+
 /// Make the set of room windows match the given monitors.
 fn sync_windows(app: &AppHandle, monitors: &[MonitorInfo]) {
+    let state = app.state::<RoomState>();
+    let _guard = state.sync_lock.lock().unwrap_or_else(|e| e.into_inner());
+    let paused = state.paused.load(Ordering::SeqCst);
+
     // Close windows for monitors that are gone.
-    for (label, window) in app.webview_windows() {
-        let index = label
-            .strip_prefix(LABEL_PREFIX)
-            .and_then(|n| n.parse::<usize>().ok());
-        if let Some(i) = index {
-            if i >= monitors.len() {
-                let _ = window.destroy();
-            }
+    for (i, window) in room_windows(app) {
+        if i >= monitors.len() {
+            let _ = window.destroy();
         }
     }
 
-    // Create or move one window per monitor.
+    let mut modes = Vec::new();
     for (i, m) in monitors.iter().enumerate() {
         let label = format!("{LABEL_PREFIX}{i}");
         let window = match app.get_webview_window(&label) {
@@ -62,8 +95,7 @@ fn sync_windows(app: &AppHandle, monitors: &[MonitorInfo]) {
                     .resizable(false)
                     .shadow(false)
                     .skip_taskbar(true)
-                    // Until step 3 attaches it to the wallpaper layer,
-                    // keep the room behind all other windows.
+                    // Used only if attaching to the wallpaper layer fails.
                     .always_on_bottom(true)
                     .focused(false)
                     .visible(false)
@@ -83,11 +115,70 @@ fn sync_windows(app: &AppHandle, monitors: &[MonitorInfo]) {
         let _ = window.set_position(PhysicalPosition::new(m.x, m.y));
         let _ = window.set_size(PhysicalSize::new(m.width, m.height));
         let _ = window.show();
+
+        // "Always at the back" would push the window below the wallpaper once it is
+        // inside Explorer's desktop, so switch it off before attaching, and back on
+        // only if attaching fails.
+        let _ = window.set_always_on_bottom(false);
+        let mode = wallpaper::attach(&window, m.x, m.y, m.width, m.height);
+        if matches!(mode, Mode::Fallback(_)) {
+            let _ = window.set_always_on_bottom(true);
+        }
+        if paused {
+            let _ = window.hide();
+        }
+        modes.push(mode);
+    }
+
+    let all_attached = !modes.is_empty() && modes.iter().all(|m| !matches!(m, Mode::Fallback(_)));
+    state.all_attached.store(all_attached, Ordering::SeqCst);
+
+    // Report in the tray menu.
+    let status = match modes.first() {
+        Some(mode) => format!("Room: {}", mode.describe()),
+        None => "Room: no monitors found".to_string(),
+    };
+    let screens: Vec<String> = monitors
+        .iter()
+        .map(|m| format!("{}×{} at {}%", m.width, m.height, (m.scale_milli as f64 / 10.0).round()))
+        .collect();
+    crate::tray::set_info(app, &status, &format!("Monitors: {}", screens.join(", ")));
+    for (i, mode) in modes.iter().enumerate() {
+        println!("RoomDesk: monitor {} → {}", i + 1, mode.describe());
+    }
+}
+
+/// Windows missing, or no longer inside Explorer's desktop (for example after Explorer restarted)?
+fn needs_repair(app: &AppHandle, expected: usize) -> bool {
+    let windows = room_windows(app);
+    if windows.len() != expected {
+        return true;
+    }
+    let state = app.state::<RoomState>();
+    state.all_attached.load(Ordering::SeqCst) && windows.iter().any(|(_, w)| !wallpaper::is_attached(w))
+}
+
+/// Rebuild all room windows now (used by the tray, for example after resuming).
+pub fn resync(app: &AppHandle) {
+    let monitors = current_monitors(app);
+    sync_windows(app, &monitors);
+}
+
+/// Show or hide every room window.
+pub fn set_paused(app: &AppHandle, paused: bool) {
+    app.state::<RoomState>().paused.store(paused, Ordering::SeqCst);
+    if paused {
+        for (_, w) in room_windows(app) {
+            let _ = w.hide();
+        }
+    } else {
+        resync(app);
     }
 }
 
 /// Create the windows now and keep them in sync with the monitors from then on.
 pub fn start(app: &AppHandle) {
+    app.manage(RoomState::default());
     let mut known = current_monitors(app);
     sync_windows(app, &known);
 
@@ -96,7 +187,10 @@ pub fn start(app: &AppHandle) {
         thread::sleep(Duration::from_secs(2));
         let now = current_monitors(&app);
         // An empty list can happen for a moment while Windows switches displays; ignore it.
-        if !now.is_empty() && now != known {
+        if now.is_empty() {
+            continue;
+        }
+        if now != known || needs_repair(&app, now.len()) {
             sync_windows(&app, &now);
             known = now;
         }

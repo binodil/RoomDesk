@@ -10,6 +10,9 @@ use tauri::{AppHandle, Manager};
 pub struct Settings {
     /// The room photo the user picked. `None` means "use the built-in sample room".
     pub photo: Option<PathBuf>,
+    /// Hide the normal Windows desktop icons while RoomDesk runs.
+    #[serde(default)]
+    pub hide_icons: bool,
 }
 
 /// The RoomDesk data folder, created if it does not exist yet.
