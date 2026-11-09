@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RoomDesk</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+    <script type="module" src="/src/main.ts"></script>
+  </head>
+  <body>
+    <main>
+      <h1>RoomDesk is running</h1>
+      <p class="ok">Step 1 works: Rust, Tauri and the web page are talking to each other.</p>
+      <h2>Monitors RoomDesk can see</h2>
+      <p class="hint">Later steps put one room on each of these screens, at the right scaling.</p>
+      <table>
+        <thead>
+          <tr><th>#</th><th>Name</th><th>Resolution</th><th>Scaling</th><th>Position</th></tr>
+        </thead>
+        <tbody id="monitors">
+          <tr><td colspan="5">Looking for monitors…</td></tr>
+        </tbody>
+      </table>
+    </main>
+  </body>
+</html>
