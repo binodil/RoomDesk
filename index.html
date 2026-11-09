@@ -8,19 +8,14 @@
     <script type="module" src="/src/main.ts"></script>
   </head>
   <body>
-    <main>
-      <h1>RoomDesk is running</h1>
-      <p class="ok">Step 1 works: Rust, Tauri and the web page are talking to each other.</p>
-      <h2>Monitors RoomDesk can see</h2>
-      <p class="hint">Later steps put one room on each of these screens, at the right scaling.</p>
-      <table>
-        <thead>
-          <tr><th>#</th><th>Name</th><th>Resolution</th><th>Scaling</th><th>Position</th></tr>
-        </thead>
-        <tbody id="monitors">
-          <tr><td colspan="5">Looking for monitors…</td></tr>
-        </tbody>
-      </table>
-    </main>
+    <div id="photo" role="img" aria-label="Room photo"></div>
+
+    <div id="bar" class="bar">
+      <span id="info" class="info">RoomDesk</span>
+      <button id="choose" type="button">Choose photo…</button>
+      <button id="reset" type="button">Sample room</button>
+      <button id="exit" type="button">Exit</button>
+      <span class="hint">Esc also exits</span>
+    </div>
   </body>
 </html>
