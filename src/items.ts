@@ -11,6 +11,7 @@ import {
   CLOCK_HTML, DECOR_KINDS, FIREPLACE_HTML, SEA_VIEW, DECOR_SIZE, DIGITAL_CLOCK_HTML, NOTE_COLORS, STICKERS, appleSvg, daysSince, escapeHtml,
   hygrometerSvg, plantSvg, recycleSvg, roseSvg, stickerSvg, thermometerSvg, tickClocks, tickDigital, type DecorKind,
 } from "./decor";
+import { KINETIC_CLOCK_HTML, tickKinetic } from "./kinetic";
 import type { SoundKind } from "./sound";
 import { DEFAULT_VIDEO, drawMap, getReading, shortName, youtubeEmbed, type MapView, type Place } from "./live";
 import { BASE, Surfaces } from "./surfaces";
@@ -43,8 +44,8 @@ export type Item = {
   watered?: number;
   /** Small tilt in degrees (notes and stickers). */
   rot?: number;
-  /** Clock: "analog" (default) or "digital". */
-  style?: "analog" | "digital";
+  /** Clock: "analog" (default), "digital" or "kinetic" (a wall of small clocks). */
+  style?: "analog" | "digital" | "kinetic";
   /** Sensors: where the weather comes from. Map: where the pin is. */
   place?: Place;
   /** Thermometer: °C or °F. */
@@ -108,7 +109,7 @@ export function parseLayout(data: unknown): Layout {
       if (Number.isFinite(r.since)) item.since = r.since;
       if (Number.isFinite(r.watered)) item.watered = r.watered;
       if (Number.isFinite(r.rot)) item.rot = r.rot;
-      if (r.style === "analog" || r.style === "digital") item.style = r.style;
+      if (r.style === "analog" || r.style === "digital" || r.style === "kinetic") item.style = r.style;
       if (r.unit === "C" || r.unit === "F") item.unit = r.unit;
       if (typeof r.url === "string") item.url = r.url;
       if (SOUNDS.includes(r.sound as string) && (kind === "window" || kind === "fireplace")) item.sound = r.sound;
@@ -235,9 +236,11 @@ function updateItem(item: Item, el: HTMLDivElement, now: number): void {
       });
       break;
     case "clock":
-      el.innerHTML = item.style === "digital" ? DIGITAL_CLOCK_HTML : CLOCK_HTML;
+      el.innerHTML =
+        item.style === "digital" ? DIGITAL_CLOCK_HTML : item.style === "kinetic" ? KINETIC_CLOCK_HTML : CLOCK_HTML;
       tickClocks(el);
       tickDigital(el);
+      tickKinetic(el, Date.now(), true);
       break;
     case "recycle":
       (el.querySelector(".bin") as HTMLElement).innerHTML = recycleSvg(binItems);
