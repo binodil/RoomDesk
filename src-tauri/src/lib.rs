@@ -353,6 +353,9 @@ pub fn run() {
             set_hit_regions
         ])
         .setup(|app| {
+            // On a Mac, live in the menu bar only: no Dock icon, no app menu.
+            #[cfg(target_os = "macos")]
+            app.set_activation_policy(tauri::ActivationPolicy::Accessory);
             let handle = app.handle();
             tray::create(handle)?;
             input::start(handle);

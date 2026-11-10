@@ -1,0 +1,10 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "bundle": {
+    "targets": ["app", "dmg"],
+    "longDescription": "RoomDesk turns the desktop into a room: put files, notes, a whiteboard, a TV, a fireplace and more on its walls and floor.",
+    "macOS": {
+      "minimumSystemVersion": "13.0"
+    }
+  }
+}

@@ -32,6 +32,7 @@ pub struct Region {
 }
 
 #[derive(Debug, Clone, Serialize)]
+#[cfg_attr(not(windows), allow(dead_code))]
 pub struct Activate {
     /// Which monitor's room (0 = first).
     pub monitor: usize,

@@ -1,4 +1,4 @@
-//! The tray icon (bottom-right of the taskbar) and its menu.
+//! The tray icon (bottom-right of the taskbar on Windows, top-right of the menu bar on a Mac) and its menu.
 
 use std::thread;
 
@@ -36,9 +36,11 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
         CheckMenuItem::with_id(app, "autostart", "Start with Windows", true, system::autostart_enabled(), None::<&str>)?;
     let version = app.package_info().version.to_string();
     let about = MenuItem::with_id(app, "about", format!("About RoomDesk {version}"), true, None::<&str>)?;
-    let exit = MenuItem::with_id(app, "exit", "Exit RoomDesk", true, None::<&str>)?;
+    // Macs say "Quit" where Windows says "Exit".
+    let exit_text = if cfg!(target_os = "macos") { "Quit RoomDesk" } else { "Exit RoomDesk" };
+    let exit = MenuItem::with_id(app, "exit", exit_text, true, None::<&str>)?;
 
-    let menu = MenuBuilder::new(app)
+    let mut builder = MenuBuilder::new(app)
         .items(&[&status, &screens])
         .separator()
         .item(&edit)
@@ -47,10 +49,13 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
         .separator()
         .items(&[&calibrate, &grid])
         .separator()
-        .items(&[&pause, &hide_icons, &autostart])
-        .separator()
-        .items(&[&about, &exit])
-        .build()?;
+        .item(&pause);
+    // Hiding desktop icons and starting with the system are Windows-only for now,
+    // so a Mac doesn't show switches that do nothing.
+    if cfg!(windows) {
+        builder = builder.items(&[&hide_icons, &autostart]);
+    }
+    let menu = builder.separator().items(&[&about, &exit]).build()?;
 
     let pause_item = pause.clone();
     let hide_item = hide_icons.clone();

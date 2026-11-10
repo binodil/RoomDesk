@@ -1,4 +1,4 @@
-//! The Recycle Bin: how full it is, and opening it in File Explorer.
+//! The Recycle Bin (the Trash on a Mac): how full it is, and opening it.
 
 use serde::Serialize;
 
@@ -35,7 +35,17 @@ pub fn open() -> Result<(), String> {
             .map(|_| ())
             .map_err(|e| e.to_string())
     }
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    {
+        // Opening the hidden ~/.Trash folder shows the Trash in Finder.
+        let home = std::env::var_os("HOME").ok_or("no home folder")?;
+        std::process::Command::new("open")
+            .arg(std::path::Path::new(&home).join(".Trash"))
+            .spawn()
+            .map(|_| ())
+            .map_err(|e| e.to_string())
+    }
+    #[cfg(not(any(windows, target_os = "macos")))]
     {
         Err("the Recycle Bin is only available on Windows".into())
     }

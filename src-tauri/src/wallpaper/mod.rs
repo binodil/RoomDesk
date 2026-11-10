@@ -15,6 +15,7 @@ pub use other::*;
 
 /// How a room window ended up attached.
 #[derive(Debug, Clone, PartialEq)]
+#[cfg_attr(not(windows), allow(dead_code))]
 pub enum Mode {
     /// Windows 11 24H2 and newer (including 25H2): child of Progman, under the desktop icons.
     NewLayout,
