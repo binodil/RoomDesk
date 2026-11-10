@@ -17,7 +17,7 @@ use std::{
     time::Duration,
 };
 
-use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
 use crate::wallpaper::{self, Mode};
 
@@ -124,8 +124,8 @@ fn sync_windows(app: &AppHandle, monitors: &[MonitorInfo]) {
         // Windows applies that monitor's scaling before we set the size.
         #[cfg(not(target_os = "macos"))]
         {
-            let _ = window.set_position(PhysicalPosition::new(m.x, m.y));
-            let _ = window.set_size(PhysicalSize::new(m.width, m.height));
+            let _ = window.set_position(tauri::PhysicalPosition::new(m.x, m.y));
+            let _ = window.set_size(tauri::PhysicalSize::new(m.width, m.height));
         }
         // macOS places windows in points, and each monitor's pixels are its points
         // times its own scale (2 on a Retina screen), so convert with that scale.
