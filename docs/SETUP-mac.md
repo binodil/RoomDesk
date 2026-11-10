@@ -1,9 +1,9 @@
 # Setup on a Mac (early test version)
 
 The Mac version is a work in progress. RoomDesk becomes your desktop: the room
-sits behind every app window, on every monitor and every Space (virtual desktop),
-and covers Finder's desktop icons (put your files in the room instead).
-File icons are still simple placeholders; real icons come next.
+sits behind every app window and Finder's desktop icons, on every monitor and
+every Space (virtual desktop). Menu bar icon → **Hide desktop icons** lets the
+room cover Finder's icons instead.
 
 You need macOS 13 (Ventura) or newer. Apple Silicon (M1 and later) and Intel Macs both work.
 
@@ -54,6 +54,17 @@ The first start compiles the Rust code and takes a few minutes. Later starts are
 
 RoomDesk has no Dock icon. Look for its cube icon in the **menu bar at the top right** of the screen.
 Everything is in its menu. **Quit RoomDesk** stops it (or press Ctrl + C in Terminal).
+
+### Allow RoomDesk to catch clicks (one time)
+
+While Finder's icons are shown, Finder sits on top of the room and takes every click.
+To still open room items with a click, RoomDesk needs **Accessibility** permission.
+macOS asks the first time: click **Open System Settings**, then turn on the switch for
+**Terminal** (while you run RoomDesk from Terminal) or **RoomDesk** (the built app).
+If you missed the question, go to System Settings → Privacy & Security → Accessibility.
+RoomDesk usually notices within a few seconds; if clicks still do nothing, quit RoomDesk and start it again.
+
+With **Hide desktop icons** on, no permission is needed.
 
 ## Get the newest version later
 

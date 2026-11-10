@@ -164,7 +164,13 @@ fn sync_windows(app: &AppHandle, monitors: &[MonitorInfo]) {
     crate::input::set_monitors(
         monitors
             .iter()
-            .map(|m| crate::input::MonitorRect { x: m.x, y: m.y, w: m.width, h: m.height })
+            .map(|m| crate::input::MonitorRect {
+                x: m.x,
+                y: m.y,
+                w: m.width,
+                h: m.height,
+                scale: m.scale_milli.max(1) as f64 / 1000.0,
+            })
             .collect(),
     );
     if front {

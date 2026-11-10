@@ -358,6 +358,9 @@ pub fn run() {
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
             let handle = app.handle();
             tray::create(handle)?;
+            // On a Mac, choose where the rooms go (above or below Finder's icons) before placing them.
+            #[cfg(target_os = "macos")]
+            wallpaper::set_desktop_icons_visible(!settings::load(handle).hide_icons);
             input::start(handle);
             monitors::start(handle);
             if settings::load(handle).hide_icons {

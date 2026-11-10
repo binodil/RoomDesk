@@ -7,7 +7,7 @@ import { STICKERS, stickerSvg, tickClocks, tickDigital, type DecorKind } from ".
 import { Items, isFile, parseLayout, type Item, type ItemInfo } from "./items";
 import { refreshMirrors } from "./mirror";
 import { runKinetic } from "./kinetic";
-import { BIN_NAME } from "./platform";
+import { BIN_NAME, IS_MAC } from "./platform";
 import { Panels } from "./panels";
 import { setResting, syncSounds } from "./sound";
 import { POINT_NAMES, defaultCalibration, parseCalibration, type Calibration, type PointName } from "./room";
@@ -148,8 +148,9 @@ function render(): void {
     }).join("");
     for (const name of POINT_NAMES) {
       const p = calibration.points[name];
-      handleEls[name].style.left = `${p.x * w}px`;
-      handleEls[name].style.top = `${p.y * h}px`;
+      // Points on the screen's edge are drawn a little inside it, where they can be grabbed.
+      handleEls[name].style.left = `${clampTo(p.x * w, EDGE.side, w - EDGE.side)}px`;
+      handleEls[name].style.top = `${clampTo(p.y * h, EDGE.top, h - EDGE.bottom)}px`;
     }
   }
 }
@@ -178,6 +179,23 @@ function updateRemoveButton(): void {
 // ---------- Calibrate mode: dragging the corner points ----------
 
 const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
+const clampTo = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+
+/**
+ * Margins (in CSS pixels) where corner dots are kept so they can be grabbed.
+ * On a Mac the menu bar covers the top, and screen corners are rounded and act
+ * as "hot corners". Dragging a dot into a margin puts its point on that edge.
+ */
+const EDGE = IS_MAC ? { top: 48, bottom: 28, side: 28 } : { top: 14, bottom: 14, side: 14 };
+
+/** A pointer position as a calibration point, snapping to the edge inside the margins. */
+function pointFromPointer(clientX: number, clientY: number): { x: number; y: number } {
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  const x = clientX <= EDGE.side ? 0 : clientX >= w - EDGE.side ? w : clientX;
+  const y = clientY <= EDGE.top ? 0 : clientY >= h - EDGE.bottom ? h : clientY;
+  return { x: clamp01(x / w), y: clamp01(y / h) };
+}
 
 let draggingPoint: { name: PointName; id: number } | null = null;
 handlesLayer.addEventListener("pointerdown", (e) => {
@@ -191,10 +209,7 @@ handlesLayer.addEventListener("pointerdown", (e) => {
 });
 handlesLayer.addEventListener("pointermove", (e) => {
   if (!draggingPoint || e.pointerId !== draggingPoint.id) return;
-  calibration.points[draggingPoint.name] = {
-    x: clamp01(e.clientX / window.innerWidth),
-    y: clamp01(e.clientY / window.innerHeight),
-  };
+  calibration.points[draggingPoint.name] = pointFromPointer(e.clientX, e.clientY);
   render();
 });
 const endPointDrag = (e: PointerEvent) => {

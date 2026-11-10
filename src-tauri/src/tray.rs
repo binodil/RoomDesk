@@ -50,10 +50,10 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
         .items(&[&calibrate, &grid])
         .separator()
         .item(&pause);
-    // Hiding desktop icons and starting with the system are Windows-only for now,
-    // so a Mac doesn't show switches that do nothing.
+    builder = builder.item(&hide_icons);
+    // Starting with the system is Windows-only for now, so a Mac doesn't show a switch that does nothing.
     if cfg!(windows) {
-        builder = builder.items(&[&hide_icons, &autostart]);
+        builder = builder.item(&autostart);
     }
     let menu = builder.separator().items(&[&about, &exit]).build()?;
 
@@ -99,6 +99,9 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
             "hide_icons" => {
                 let hide = hide_item.is_checked().unwrap_or(false);
                 wallpaper::set_desktop_icons_visible(!hide);
+                // On a Mac the rooms move above or below Finder's icons.
+                #[cfg(target_os = "macos")]
+                monitors::resync(app);
                 let mut s = settings::load(app);
                 s.hide_icons = hide;
                 if let Err(e) = settings::save(app, &s) {
