@@ -6,10 +6,12 @@
 // perspective together with its surface.
 
 export type DecorKind =
-  | "note" | "sticker" | "image" | "clock" | "plant" | "rose" | "apple" | "whiteboard" | "mirror";
+  | "note" | "sticker" | "image" | "clock" | "plant" | "rose" | "apple" | "whiteboard" | "mirror"
+  | "recycle" | "thermometer" | "hygrometer" | "map" | "window" | "fireplace";
 
 export const DECOR_KINDS: DecorKind[] = [
   "note", "sticker", "image", "clock", "plant", "rose", "apple", "whiteboard", "mirror",
+  "recycle", "thermometer", "hygrometer", "map", "window", "fireplace",
 ];
 
 /** Size (fraction of the surface height) a new item starts at. */
@@ -23,6 +25,12 @@ export const DECOR_SIZE: Record<DecorKind, number> = {
   apple: 0.08,
   whiteboard: 0.55,
   mirror: 0.26,
+  recycle: 0.13,
+  thermometer: 0.08,
+  hygrometer: 0.14,
+  map: 0.4,
+  window: 0.42,
+  fireplace: 0.42,
 };
 
 export const NOTE_COLORS = ["#fde68a", "#fbcfe8", "#bfdbfe", "#bbf7d0", "#fed7aa"];
@@ -174,6 +182,97 @@ export function tickClocks(root: ParentNode, date = new Date()): void {
   });
 }
 
+// ---------- Digital clock ----------
+
+export const DIGITAL_CLOCK_HTML = '<div class="digiclock"><div class="dtime"></div><div class="ddate"></div></div>';
+
+export function tickDigital(root: ParentNode, date = new Date()): void {
+  const time = date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  const day = date.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" });
+  root.querySelectorAll<HTMLElement>(".digiclock").forEach((c) => {
+    const t = c.querySelector(".dtime") as HTMLElement;
+    const d = c.querySelector(".ddate") as HTMLElement;
+    if (t.textContent !== time) t.textContent = time;
+    if (d.textContent !== day) d.textContent = day;
+  });
+}
+
+// ---------- Recycle bin ----------
+
+/** A mesh waste basket, with crumpled paper in it when the bin has something. */
+export function recycleSvg(items: number): string {
+  const fill = Math.min(1, items / 40);
+  const papers =
+    items > 0
+      ? [
+          [34, 30, 11, "#f4f1ea"],
+          [52, 26, 12, "#e9eef5"],
+          [66, 32, 10, "#f4f1ea"],
+          [44, 20, 9, "#fff7d6"],
+          [60, 16, 9, "#f4f1ea"],
+        ]
+          .slice(0, 2 + Math.round(fill * 3))
+          .map(([x, y, r, c]) => `<path d="M${Number(x) - Number(r)} ${y} q ${Number(r) * 0.4} ${-Number(r)} ${r} ${-Number(r) * 0.8} q ${Number(r) * 0.8} ${-Number(r) * 0.2} ${r} ${r} q ${-Number(r) * 0.2} ${Number(r) * 0.9} ${-r} ${Number(r) * 0.8} q ${-Number(r) * 0.8} 0 ${-r} ${-r}z" fill="${c}" stroke="#c9c4b8" stroke-width="1"/>`)
+          .join("")
+      : "";
+  return `<svg viewBox="0 0 100 110" xmlns="http://www.w3.org/2000/svg">
+    <ellipse cx="50" cy="104" rx="30" ry="4" fill="rgba(0,0,0,.25)"/>
+    ${papers}
+    <path d="M14 30h72l-8 70a5 5 0 0 1-5 4H27a5 5 0 0 1-5-4z" fill="rgba(170,190,205,.55)" stroke="#8fa6b8" stroke-width="2"/>
+    <g stroke="#8fa6b8" stroke-width="1.4" opacity=".9">${Array.from({ length: 9 }, (_, i) => `<path d="M${22 + i * 7} 31 L${27 + i * 5.8} 103"/>`).join("")}
+    <path d="M17 52h66M19 74h62M21 94h58"/></g>
+    <rect x="11" y="26" width="78" height="7" rx="3" fill="#dfe8ef" stroke="#8fa6b8" stroke-width="1.5"/>
+  </svg>`;
+}
+
+// ---------- Weather sensors ----------
+
+/** A wall thermometer. `c` = degrees Celsius (null while unknown). */
+export function thermometerSvg(c: number | null, label: string): string {
+  // The scale runs from -30 °C to 50 °C.
+  const t = c === null ? 0 : Math.max(0, Math.min(1, (c + 30) / 80));
+  const top = 150 - t * 120;
+  const ticks = Array.from({ length: 9 }, (_, i) => {
+    const y = 150 - i * 15;
+    return `<path d="M36 ${y}h${i % 2 ? 5 : 8}" stroke="#555" stroke-width="1"/>` +
+      (i % 2 ? "" : `<text x="47" y="${y + 3}" font-size="8" fill="#444" font-family="Segoe UI, sans-serif">${-30 + i * 10}</text>`);
+  }).join("");
+  return `<svg viewBox="0 0 70 200" xmlns="http://www.w3.org/2000/svg">
+    <rect x="4" y="4" width="62" height="192" rx="31" fill="#f7f5f0" stroke="#c9c4b8" stroke-width="2"/>
+    ${ticks}
+    <rect x="24" y="22" width="10" height="140" rx="5" fill="#e6e2da" stroke="#bbb" stroke-width="1"/>
+    ${c === null ? "" : `<rect x="26.5" y="${top}" width="5" height="${165 - top}" rx="2.5" fill="#d6283a"/>`}
+    <circle cx="29" cy="168" r="11" fill="${c === null ? "#bbb" : "#d6283a"}" stroke="#bbb" stroke-width="1"/>
+    <text x="35" y="190" font-size="9" text-anchor="middle" fill="#555" font-family="Segoe UI, sans-serif">${escapeHtml(label)}</text>
+  </svg>`;
+}
+
+/** A round dial hygrometer. `h` = relative humidity in percent (null while unknown). */
+export function hygrometerSvg(h: number | null, label: string): string {
+  const a = -120 + ((h ?? 0) / 100) * 240;
+  const ticks = Array.from({ length: 11 }, (_, i) => {
+    const ang = ((-120 + i * 24) * Math.PI) / 180;
+    const r1 = 38;
+    const r2 = i % 5 ? 34 : 31;
+    return `<path d="M${50 + Math.sin(ang) * r1} ${50 - Math.cos(ang) * r1}L${50 + Math.sin(ang) * r2} ${50 - Math.cos(ang) * r2}" stroke="#444" stroke-width="${i % 5 ? 1 : 1.8}"/>`;
+  }).join("");
+  const arc = (from: number, to: number, color: string) => {
+    const p = (d: number) => `${50 + Math.sin((d * Math.PI) / 180) * 41} ${50 - Math.cos((d * Math.PI) / 180) * 41}`;
+    return `<path d="M${p(from)} A41 41 0 0 1 ${p(to)}" stroke="${color}" stroke-width="4" fill="none"/>`;
+  };
+  return `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+    <circle cx="50" cy="50" r="48" fill="#b8964f"/>
+    <circle cx="50" cy="50" r="44" fill="#f7f5f0"/>
+    ${arc(-120, -48, "#e8a33d")}${arc(-48, 48, "#4caf7a")}${arc(48, 120, "#4c8fd6")}
+    ${ticks}
+    <text x="50" y="34" font-size="7" text-anchor="middle" fill="#666" font-family="Segoe UI, sans-serif">HUMIDITY %</text>
+    <text x="50" y="74" font-size="11" font-weight="600" text-anchor="middle" fill="#333" font-family="Segoe UI, sans-serif">${h === null ? "—" : Math.round(h)}</text>
+    <text x="50" y="86" font-size="6.5" text-anchor="middle" fill="#666" font-family="Segoe UI, sans-serif">${escapeHtml(label)}</text>
+    ${h === null ? "" : `<path d="M50 50 L50 15" stroke="#222" stroke-width="2" stroke-linecap="round" transform="rotate(${a} 50 50)"/>`}
+    <circle cx="50" cy="50" r="3.5" fill="#222"/>
+  </svg>`;
+}
+
 /** What clicking an item does when the room is behind the desktop icons. */
 export const CLICK_ACTION: Partial<Record<DecorKind, string>> = {
   note: "Click to write on it",
@@ -181,4 +280,16 @@ export const CLICK_ACTION: Partial<Record<DecorKind, string>> = {
   plant: "Click to water it",
   rose: "Click for a fresh rose",
   apple: "Click for a fresh apple",
+  recycle: "Click to open the Recycle Bin",
+  thermometer: "Click to choose the place",
+  hygrometer: "Click to choose the place",
+  map: "Click to move and zoom the map",
+  window: "Click to change the view and sound",
+  fireplace: "Click to turn the fire sound on or off",
 };
+
+export const FIREPLACE_HTML =
+  '<div class="fireplace"><div class="mantel"></div><div class="fpbody"><div class="firebox">' +
+  '<div class="glow"></div><div class="flames"><i></i><i></i><i></i><i></i><i></i><i></i></div>' +
+  '<div class="logs"><b></b><b></b></div><div class="embers"><s></s><s></s><s></s></div>' +
+  '</div></div><div class="fpbase"></div></div>';
