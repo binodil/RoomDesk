@@ -103,6 +103,12 @@ fn sync_windows(app: &AppHandle, monitors: &[MonitorInfo]) {
                     .always_on_bottom(true)
                     .focused(false)
                     .visible(false)
+                    // Tauri's usual WebView2 settings, plus letting the fireplace and window
+                    // sounds start without a click (clicks reach the room through the mouse
+                    // hook, which the browser doesn't count as the user starting playback).
+                    .additional_browser_args(
+                        "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection --autoplay-policy=no-user-gesture-required",
+                    )
                     .build();
                 match built {
                     Ok(w) => w,

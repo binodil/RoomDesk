@@ -8,9 +8,11 @@
 import { invoke } from "@tauri-apps/api/core";
 import { boardHtml, deleteBoard, loadBoard } from "./board";
 import {
-  CLOCK_HTML, DECOR_KINDS, DECOR_SIZE, NOTE_COLORS, STICKERS, appleSvg, daysSince,
-  plantSvg, roseSvg, stickerSvg, tickClocks, type DecorKind,
+  CLOCK_HTML, DECOR_KINDS, FIREPLACE_HTML, DECOR_SIZE, DIGITAL_CLOCK_HTML, NOTE_COLORS, STICKERS, appleSvg, daysSince, escapeHtml,
+  hygrometerSvg, plantSvg, recycleSvg, roseSvg, stickerSvg, thermometerSvg, tickClocks, tickDigital, type DecorKind,
 } from "./decor";
+import type { SoundKind } from "./sound";
+import { DEFAULT_VIDEO, drawMap, getReading, shortName, youtubeEmbed, type MapView, type Place } from "./live";
 import { BASE, Surfaces } from "./surfaces";
 import type { SurfaceName } from "./room";
 
@@ -41,6 +43,19 @@ export type Item = {
   watered?: number;
   /** Small tilt in degrees (notes and stickers). */
   rot?: number;
+  /** Clock: "analog" (default) or "digital". */
+  style?: "analog" | "digital";
+  /** Sensors: where the weather comes from. Map: where the pin is. */
+  place?: Place;
+  /** Thermometer: °C or °F. */
+  unit?: "C" | "F";
+  /** Map: the part of the map that is shown. */
+  view?: MapView;
+  /** Window: the YouTube link it plays (when it has no picture in `path`). */
+  url?: string;
+  /** Window and fireplace: the sound it makes, and how loud (0–1). */
+  sound?: SoundKind | "none";
+  volume?: number;
 };
 
 export type Layout = { version: 1; items: Item[] };
@@ -56,8 +71,11 @@ export const isFile = (kind: ItemKind): kind is FileKind => (FILE_KINDS as strin
 const KINDS: ItemKind[] = [...FILE_KINDS, ...DECOR_KINDS];
 
 /** Items that do something when clicked behind the desktop icons. Others let clicks through to the desktop. */
-export const isClickable = (kind: ItemKind) =>
-  isFile(kind) || kind === "note" || kind === "whiteboard" || kind === "plant" || kind === "rose" || kind === "apple";
+const CLICKABLE: ItemKind[] = [
+  "note", "whiteboard", "plant", "rose", "apple", "recycle", "thermometer", "hygrometer", "map", "window", "fireplace",
+];
+const SOUNDS = ["fire", "ocean", "wind", "rain", "none"];
+export const isClickable = (kind: ItemKind) => isFile(kind) || CLICKABLE.includes(kind);
 const SURFACES_OK = new Set(["back", "left", "right", "floor", "ceiling"]);
 
 export function parseLayout(data: unknown): Layout {
@@ -85,6 +103,19 @@ export function parseLayout(data: unknown): Layout {
       if (Number.isFinite(r.since)) item.since = r.since;
       if (Number.isFinite(r.watered)) item.watered = r.watered;
       if (Number.isFinite(r.rot)) item.rot = r.rot;
+      if (r.style === "analog" || r.style === "digital") item.style = r.style;
+      if (r.unit === "C" || r.unit === "F") item.unit = r.unit;
+      if (typeof r.url === "string") item.url = r.url;
+      if (SOUNDS.includes(r.sound as string) && (kind === "window" || kind === "fireplace")) item.sound = r.sound;
+      if (Number.isFinite(r.volume)) item.volume = Math.min(1, Math.max(0, Number(r.volume)));
+      const place = r.place as Partial<Place> | undefined;
+      if (place && Number.isFinite(place.lat) && Number.isFinite(place.lon)) {
+        item.place = { name: String(place.name ?? ""), lat: Number(place.lat), lon: Number(place.lon) };
+      }
+      const view = r.view as Partial<MapView> | undefined;
+      if (view && Number.isFinite(view.lat) && Number.isFinite(view.lon) && Number.isFinite(view.zoom)) {
+        item.view = { lat: Number(view.lat), lon: Number(view.lon), zoom: Number(view.zoom) };
+      }
       items.push(item);
     }
   }
@@ -157,9 +188,11 @@ function buildItem(item: Item, el: HTMLDivElement): void {
     case "sticker":
       el.innerHTML = stickerSvg(item.glyph);
       break;
-    case "clock":
-      el.innerHTML = CLOCK_HTML;
-      tickClocks(el);
+    case "recycle":
+      el.innerHTML = '<div class="bin"></div><div class="name">Recycle Bin</div>';
+      break;
+    case "fireplace":
+      el.innerHTML = FIREPLACE_HTML;
       break;
     case "whiteboard":
       el.innerHTML = '<div class="wbframe"><div class="wbsurf"></div></div><div class="wbledge"></div>';
@@ -195,15 +228,88 @@ function updateItem(item: Item, el: HTMLDivElement, now: number): void {
         (el.querySelector(".wbsurf") as HTMLElement).innerHTML = boardHtml(b);
       });
       break;
+    case "clock":
+      el.innerHTML = item.style === "digital" ? DIGITAL_CLOCK_HTML : CLOCK_HTML;
+      tickClocks(el);
+      tickDigital(el);
+      break;
+    case "recycle":
+      (el.querySelector(".bin") as HTMLElement).innerHTML = recycleSvg(binItems);
+      el.title = binItems ? `Recycle Bin: ${binItems} item${binItems === 1 ? "" : "s"}` : "Recycle Bin (empty)";
+      break;
+    case "thermometer":
+    case "hygrometer": {
+      const label = item.place ? shortName(item.place) : "Click to set";
+      const draw = (temp: number | null, humidity: number | null) => {
+        el.innerHTML = item.kind === "thermometer"
+          ? thermometerSvg(temp === null ? null : temp, item.place ? `${label} ${temp === null ? "" : `${(item.unit === "F" ? temp * 1.8 + 32 : temp).toFixed(0)}°${item.unit ?? "C"}`}` : label)
+          : hygrometerSvg(humidity, label);
+      };
+      draw(null, null);
+      if (item.place) {
+        void getReading(item.place).then((r) => {
+          if (r) draw(r.temp, r.humidity);
+        });
+      }
+      break;
+    }
+    case "map": {
+      const place = item.place;
+      const view = item.view ?? (place ? { lat: place.lat, lon: place.lon, zoom: 12 } : { lat: 30, lon: 20, zoom: 2 });
+      el.innerHTML =
+        '<div class="mapframe"><div class="mapwin"><div class="tiles"></div></div>' +
+        `<div class="mapcap"><span>${escapeHtml(place ? shortName(place) : "Click to choose a place")}</span><span>© OpenStreetMap</span></div></div>`;
+      drawMap(el.querySelector(".tiles") as HTMLElement, view, MAP_W, MAP_H, place);
+      break;
+    }
+    case "window": {
+      let view = "";
+      if (item.path) {
+        view = '<img class="outside" alt="" draggable="false">';
+      } else {
+        const src = youtubeEmbed(item.url ?? DEFAULT_VIDEO, { muted: true, controls: false });
+        if (src) {
+          view = `<iframe src="${escapeHtml(src)}" title="Window" allow="autoplay; encrypted-media" referrerpolicy="strict-origin-when-cross-origin" tabindex="-1"></iframe>`;
+        }
+      }
+      el.innerHTML = `<div class="winframe"><div class="glass">${view}</div><div class="mull"></div><div class="shine"></div></div><div class="sill"></div>`;
+      if (item.path) {
+        const img = el.querySelector("img") as HTMLImageElement;
+        void pictureFor(item.path).then((src) => {
+          if (src) img.src = src;
+        });
+      }
+      break;
+    }
     default:
       break;
   }
 }
 
+/** The wall map is drawn at this size and then scaled to the item. */
+const MAP_W = 480;
+const MAP_H = 320;
+
+/** Number of things in the Recycle Bin (updated from Windows every few seconds). */
+let binItems = 0;
+
+/** A key that changes whenever an item needs redrawing. */
+function drawKey(item: Item, now: number): string {
+  const aging = item.kind === "plant" || item.kind === "rose" || item.kind === "apple";
+  return [
+    item.text, item.color, item.since, item.watered, item.style, item.unit, item.url,
+    item.kind === "window" ? item.path : "",
+    item.place && `${item.place.lat},${item.place.lon},${item.place.name}`,
+    item.view && `${item.view.lat},${item.view.lon},${item.view.zoom}`,
+    item.kind === "recycle" ? binItems : "",
+    aging ? Math.floor(now / 600000) : "",
+  ].join("|");
+}
+
 // ---------- Drawing ----------
 
 /** Things that stand upright when put on the floor, instead of lying flat on it. */
-const STANDS: ItemKind[] = ["plant", "rose", "apple"];
+const STANDS: ItemKind[] = ["plant", "rose", "apple", "recycle", "fireplace"];
 const standsUp = (item: Item) => item.surface === "floor" && STANDS.includes(item.kind);
 
 export class Items {
@@ -244,7 +350,7 @@ export class Items {
         el.dataset.version = "";
       }
       // Redraw the changing parts only when something about them changed.
-      const version = `${item.text}|${item.color}|${item.since}|${item.watered}|${Math.floor(now / 600000)}`;
+      const version = drawKey(item, now);
       if (el.dataset.version !== version) {
         el.dataset.version = version;
         updateItem(item, el, now);
@@ -263,6 +369,7 @@ export class Items {
       el.style.width = `${size}px`;
       el.style.setProperty("--label", `${Math.max(10, size * 0.16)}px`);
       el.style.setProperty("--s", `${size}px`);
+      if (item.kind === "map") el.style.setProperty("--k", String((size * 0.94) / MAP_W));
       if (isFile(item.kind)) {
         // The icon (not the label below it) is centred on the item's position.
         el.style.left = `${item.x * width - size / 2}px`;
@@ -315,6 +422,37 @@ export class Items {
       const el = this.els.get(item.id);
       if (el && (item.kind === "plant" || item.kind === "rose" || item.kind === "apple")) updateItem(item, el, now);
     }
+  }
+
+  /** Fresh weather for the sensors (call every 15 minutes or so). */
+  refreshWeather(): void {
+    const now = Date.now();
+    for (const item of this.layout.items) {
+      const el = this.els.get(item.id);
+      if (el && (item.kind === "thermometer" || item.kind === "hygrometer")) updateItem(item, el, now);
+    }
+  }
+
+  /** The sounds that should be playing now (item id → sound and volume). */
+  sounds(): Map<string, { kind: SoundKind; volume: number }> {
+    const out = new Map<string, { kind: SoundKind; volume: number }>();
+    for (const item of this.layout.items) {
+      if ((item.kind === "window" || item.kind === "fireplace") && item.sound && item.sound !== "none") {
+        out.set(item.id, { kind: item.sound, volume: item.volume ?? 0.5 });
+      }
+    }
+    return out;
+  }
+
+  get hasRecycleBin(): boolean {
+    return this.layout.items.some((i) => i.kind === "recycle");
+  }
+
+  /** The Recycle Bin changed between empty and full (or its count changed). */
+  setRecycleCount(count: number): void {
+    if (count === binItems) return;
+    binItems = count;
+    this.render();
   }
 
   /** Show a whiteboard's latest drawing on the wall. */
@@ -388,6 +526,8 @@ export class Items {
     }
     if (kind === "plant" || kind === "rose" || kind === "apple") item.since = now;
     if (kind === "plant") item.watered = now;
+    if (kind === "fireplace") item.sound ??= "fire";
+    if (kind === "clock") item.style ??= "analog";
     this.layout.items.push(item);
     this.selectedId = item.id;
     this.render();

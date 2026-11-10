@@ -6,6 +6,7 @@
 mod icons;
 mod input;
 mod monitors;
+mod recycle;
 mod settings;
 mod tray;
 mod wallpaper;
@@ -274,6 +275,18 @@ fn open_item(app: AppHandle, path: String) -> Result<(), String> {
     app.opener().open_path(path, None::<&str>).map_err(|e| e.to_string())
 }
 
+/// How full the Recycle Bin is.
+#[tauri::command]
+fn recycle_bin_state() -> Result<recycle::BinState, String> {
+    recycle::state()
+}
+
+/// Open the Recycle Bin in File Explorer.
+#[tauri::command]
+fn open_recycle_bin() -> Result<(), String> {
+    recycle::open()
+}
+
 /// Where this room's items are on screen, so clicks behind the desktop icons can reach them.
 #[tauri::command]
 fn set_hit_regions(window: WebviewWindow, regions: Vec<input::Region>) {
@@ -325,6 +338,8 @@ pub fn run() {
             delete_board,
             item_icon,
             open_item,
+            recycle_bin_state,
+            open_recycle_bin,
             set_hit_regions
         ])
         .setup(|app| {

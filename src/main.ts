@@ -3,9 +3,11 @@ import { listen } from "@tauri-apps/api/event";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { availableMonitors, currentMonitor, getCurrentWindow } from "@tauri-apps/api/window";
 import { FocusEditor } from "./board";
-import { STICKERS, stickerSvg, tickClocks, type DecorKind } from "./decor";
-import { Items, isFile, parseLayout, type ItemInfo } from "./items";
+import { STICKERS, stickerSvg, tickClocks, tickDigital, type DecorKind } from "./decor";
+import { Items, isFile, parseLayout, type Item, type ItemInfo } from "./items";
 import { refreshMirrors } from "./mirror";
+import { Panels } from "./panels";
+import { syncSounds } from "./sound";
 import { POINT_NAMES, defaultCalibration, parseCalibration, type Calibration, type PointName } from "./room";
 import { BASE, SURFACE_NAMES, Surfaces } from "./surfaces";
 
@@ -33,8 +35,11 @@ const items = new Items(surfaces, () => {
   saveLayoutSoon();
   updateRemoveButton();
   refreshMirrorsSoon();
+  syncSounds(items.sounds());
 });
 const focusEditor = new FocusEditor();
+const panels = new Panels();
+const PANEL_KINDS = new Set(["thermometer", "hygrometer", "map", "window"]);
 
 let calibration: Calibration = defaultCalibration();
 let monitorKey = "";
@@ -121,6 +126,7 @@ function render(): void {
   items.render();
   sendHitRegionsSoon();
   refreshMirrorsSoon();
+  syncSounds(items.sounds());
 
   if (mode === "calibrate") {
     const w = window.innerWidth;
@@ -140,10 +146,11 @@ function render(): void {
 }
 
 function setMode(next: Mode): void {
-  if (next !== "focus" && focusEditor.isOpen) {
-    // Switched from the tray while a whiteboard or note was open: save it and move on.
+  if (next !== "focus" && (focusEditor.isOpen || panels.isOpen)) {
+    // Switched from the tray while something was zoomed in: save it and move on.
     mode = next;
     focusEditor.close();
+    panels.close();
   }
   closeAddMenu();
   mode = next;
@@ -295,6 +302,12 @@ const START_SPOTS: Record<DecorKind, [number, number]> = {
   apple: [0.7, 0.8],
   whiteboard: [0.45, 0.42],
   mirror: [0.8, 0.45],
+  recycle: [0.08, 0.85],
+  thermometer: [0.3, 0.3],
+  hygrometer: [0.36, 0.3],
+  map: [0.25, 0.4],
+  window: [0.6, 0.38],
+  fireplace: [0.5, 0.8],
 };
 
 addMenu.addEventListener("click", async (e) => {
@@ -308,17 +321,28 @@ addMenu.addEventListener("click", async (e) => {
     const path = await invoke<string | null>("pick_image").catch(() => null);
     if (path) items.addDecor("image", "back", x - nudge, y + nudge, { path });
   } else {
-    const item = items.addDecor(kind, "back", x + nudge, y + nudge, kind === "sticker" ? { glyph: b.dataset.glyph } : {});
-    if (kind === "note") openFocus(item.id);
+    const extra: Partial<Item> = {};
+    if (kind === "sticker") extra.glyph = b.dataset.glyph;
+    if (kind === "clock") extra.style = b.dataset.style === "digital" ? "digital" : "analog";
+    // Sensors and maps start at the place already used by another one.
+    const known = items.layout.items.find((i) => i.place)?.place;
+    if (known && (kind === "thermometer" || kind === "hygrometer" || kind === "map")) extra.place = known;
+    const item = items.addDecor(kind, "back", x + nudge, y + nudge, extra);
+    if (kind === "note" || ((kind === "thermometer" || kind === "hygrometer" || kind === "map") && !known)) openFocus(item.id);
   }
   updateRemoveButton();
 });
 
-// Double-click a note or whiteboard while editing to write on it.
+// Double-click while editing: write on a note or whiteboard, set up a sensor,
+// map or window, switch a clock between analog and digital.
 document.addEventListener("dblclick", (e) => {
   if (mode !== "edit") return;
   const id = (e.target as HTMLElement).closest<HTMLElement>(".item")?.dataset.id;
-  if (id) openFocus(id);
+  const item = id ? items.find(id) : undefined;
+  if (!item) return;
+  if (item.kind === "clock") items.update(item.id, { style: item.style === "digital" ? "analog" : "digital" });
+  else if (item.kind === "fireplace") toggleFire(item);
+  else openFocus(item.id);
 });
 removeBtn.addEventListener("click", () => {
   if (items.selectedId) items.remove(items.selectedId);
@@ -327,7 +351,7 @@ $("editDone").addEventListener("click", () => void invoke("finish_front_mode"));
 
 window.addEventListener("keydown", (e) => {
   // Keys handled by the whiteboard or note (or typed into them) are not for us.
-  if (e.defaultPrevented || focusEditor.isOpen) return;
+  if (e.defaultPrevented || focusEditor.isOpen || panels.isOpen) return;
   if (e.key === "Escape" && !addMenu.hidden) {
     closeAddMenu();
     return;
@@ -376,7 +400,7 @@ let focusReturn: Mode = "use";
 
 function openFocus(id: string): void {
   const item = items.find(id);
-  if (!item || (item.kind !== "note" && item.kind !== "whiteboard")) return;
+  if (!item || !(item.kind === "note" || item.kind === "whiteboard" || PANEL_KINDS.has(item.kind))) return;
   if (mode === "use") {
     // Behind the desktop icons there is no keyboard: come to the front first.
     void invoke("bring_to_front");
@@ -389,9 +413,7 @@ function openFocus(id: string): void {
   document.body.dataset.mode = "focus";
   editbar.hidden = true;
   closeAddMenu();
-  const done: Parameters<FocusEditor["openNote"]>[3] = (result) => {
-    if (result?.kind === "note") items.update(result.id, { text: result.text, color: result.color });
-    else if (result) void items.refreshBoard(result.id);
+  const leave = () => {
     refreshMirrorsSoon();
     const back = focusReturn;
     focusReturn = "use";
@@ -403,8 +425,28 @@ function openFocus(id: string): void {
       setMode(back);
     }
   };
+  if (PANEL_KINDS.has(item.kind)) {
+    panels.open(
+      item,
+      (changes) => items.update(id, changes),
+      (changes) => {
+        items.update(id, changes);
+        leave();
+      },
+    );
+    return;
+  }
+  const done: Parameters<FocusEditor["openNote"]>[3] = (result) => {
+    if (result?.kind === "note") items.update(result.id, { text: result.text, color: result.color });
+    else if (result) void items.refreshBoard(result.id);
+    leave();
+  };
   if (item.kind === "note") focusEditor.openNote(id, item.text ?? "", item.color ?? "", done);
   else void focusEditor.openBoard(id, done);
+}
+
+function toggleFire(item: Item): void {
+  items.update(item.id, { sound: item.sound === "fire" ? "none" : "fire" });
 }
 
 // ---------- Use mode: clicking items ----------
@@ -434,8 +476,18 @@ function activate(id: string): void {
       items.update(id, { since: Date.now() });
       flash("fresh", 800);
       break;
+    case "recycle":
+      invoke("open_recycle_bin").catch((e) => console.error(e));
+      break;
+    case "fireplace":
+      toggleFire(item);
+      break;
     case "note":
     case "whiteboard":
+    case "thermometer":
+    case "hygrometer":
+    case "map":
+    case "window":
       openFocus(id);
       break;
     default:
@@ -455,7 +507,19 @@ document.addEventListener("click", (e) => {
 });
 
 // Clocks tick, and the plant, rose and apple are redrawn as time passes.
-window.setInterval(() => tickClocks(surfaces.layer), 1000);
+window.setInterval(() => {
+  tickClocks(surfaces.layer);
+  tickDigital(surfaces.layer);
+}, 1000);
+// Fresh weather for the sensors.
+window.setInterval(() => items.refreshWeather(), 15 * 60 * 1000);
+// Whether the Recycle Bin has something in it.
+async function checkRecycleBin(): Promise<void> {
+  if (!items.hasRecycleBin) return;
+  const state = await invoke<{ items: number }>("recycle_bin_state").catch(() => null);
+  if (state) items.setRecycleCount(state.items);
+}
+window.setInterval(() => void checkRecycleBin(), 5000);
 window.setInterval(() => {
   items.refreshAging();
   refreshMirrorsSoon();
@@ -476,6 +540,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   }
   render();
   void wireFileDrop();
+  void checkRecycleBin();
 
   void listen("photo-changed", async () => {
     await showPhoto();
