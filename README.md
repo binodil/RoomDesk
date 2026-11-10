@@ -18,11 +18,15 @@ After it starts, look for the cube icon in the taskbar tray (bottom right, possi
 - **Notes and whiteboards**: click to zoom in, then type, draw and stick pictures.
 - **TV**: the space station live stream (or any YouTube link) with sound.
 - **Window**: your own picture of a view, with ocean, wind or rain sounds.
+- **Wall of clocks**: 72 small clocks whose hands draw the time in big digits, then sweep together through patterns as each minute ends.
+
+  ![Wall of clocks](docs/wall-of-clocks.png)
+
 - **Fireplace** with a crackling fire, **clock** (analog or digital), **map**, **thermometer** and **humidity** dial for your city.
 - **Things that live**: a plant that grows and needs watering, a rose that blooms and wilts over two weeks, an apple that browns in a week.
 - **Mirror**, **pictures**, **stickers** and a **Recycle Bin**.
 
-Tray → **Edit items…** to add, move (drag), resize (scroll) and remove things. Tray → **Calibrate room…** to fit the walls to your photo.
+Tray → **Edit items…** to add, move (drag), resize (scroll) and remove things. Double-click a clock to switch between analog, digital and the wall of clocks. Tray → **Calibrate room…** to fit the walls to your photo.
 
 RoomDesk pauses its videos, sounds and animations while a game or other full-screen app is open.
 
