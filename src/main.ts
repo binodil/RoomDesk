@@ -6,6 +6,7 @@ import { FocusEditor } from "./board";
 import { STICKERS, stickerSvg, tickClocks, tickDigital, type DecorKind } from "./decor";
 import { Items, isFile, parseLayout, type Item, type ItemInfo } from "./items";
 import { refreshMirrors } from "./mirror";
+import { runKinetic } from "./kinetic";
 import { BIN_NAME } from "./platform";
 import { Panels } from "./panels";
 import { setResting, syncSounds } from "./sound";
@@ -328,7 +329,11 @@ addMenu.addEventListener("click", async (e) => {
   } else {
     const extra: Partial<Item> = {};
     if (kind === "sticker") extra.glyph = b.dataset.glyph;
-    if (kind === "clock") extra.style = b.dataset.style === "digital" ? "digital" : "analog";
+    if (kind === "clock") {
+      const style = b.dataset.style;
+      extra.style = style === "digital" || style === "kinetic" ? style : "analog";
+      if (style === "kinetic") extra.size = 0.5;
+    }
     // Sensors and maps start at the place already used by another one.
     const known = items.layout.items.find((i) => i.place)?.place;
     if (known && (kind === "thermometer" || kind === "hygrometer" || kind === "map")) extra.place = known;
@@ -339,13 +344,19 @@ addMenu.addEventListener("click", async (e) => {
 });
 
 // Double-click while editing: write on a note or whiteboard, set up a sensor,
-// map or window, switch a clock between analog and digital.
+// map or window, switch a clock between analog, digital and kinetic.
 document.addEventListener("dblclick", (e) => {
   if (mode !== "edit") return;
   const id = (e.target as HTMLElement).closest<HTMLElement>(".item")?.dataset.id;
   const item = id ? items.find(id) : undefined;
   if (!item) return;
-  if (item.kind === "clock") items.update(item.id, { style: item.style === "digital" ? "analog" : "digital" });
+  if (item.kind === "clock") {
+    const next = { analog: "digital", digital: "kinetic", kinetic: "analog" } as const;
+    const style = next[item.style ?? "analog"];
+    // The wall of clocks needs room; the others are small.
+    const size = style === "kinetic" ? Math.max(item.size, 0.5) : item.style === "kinetic" ? item.size / 3 : item.size;
+    items.update(item.id, { style, size });
+  }
   else if (item.kind === "fireplace") toggleFire(item);
   else openFocus(item.id);
 });
@@ -514,6 +525,8 @@ document.addEventListener("click", (e) => {
   if (el?.dataset.id) activate(el.dataset.id);
 });
 
+// The kinetic clocks move every frame (and rest while a full-screen app is open).
+runKinetic(surfaces.layer, () => document.body.classList.contains("resting"));
 // Clocks tick, and the plant, rose and apple are redrawn as time passes.
 window.setInterval(() => {
   tickClocks(surfaces.layer);

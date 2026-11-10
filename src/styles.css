@@ -669,3 +669,36 @@ html, body {
 
 /* While a game or full-screen app is open, nothing moves. */
 .resting *, .resting *::before, .resting *::after { animation-play-state: paused !important; }
+
+/* ---------- Kinetic clock: a wall of 12 × 6 small clocks ---------- */
+.kinetic {
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: calc(var(--s) * 0.006);
+  aspect-ratio: 2;
+  padding: calc(var(--s) * 0.022);
+  border-radius: calc(var(--s) * 0.012);
+  background: linear-gradient(160deg, #fbfaf7, #e9e6df);
+  border: calc(var(--s) * 0.008) solid #d8d4cb;
+  box-shadow: 0 calc(var(--s) * 0.02) calc(var(--s) * 0.05) rgba(0, 0, 0, 0.4);
+}
+.kinetic span {
+  position: relative;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle at 45% 40%, #ffffff 55%, #efede8);
+  box-shadow: inset 0 0 0 calc(var(--s) * 0.0015) rgba(0, 0, 0, 0.12), 0 calc(var(--s) * 0.002) calc(var(--s) * 0.004) rgba(0, 0, 0, 0.12);
+}
+/* Each hand is a square the size of its clock, turned about the middle; the bar is drawn from the middle up. */
+.kinetic b { position: absolute; inset: 0; }
+.kinetic b::before {
+  content: "";
+  position: absolute;
+  left: 43%;
+  width: 14%;
+  top: 4%;
+  height: 53%;
+  border-radius: 999px;
+  background: #1d1c1a;
+}
