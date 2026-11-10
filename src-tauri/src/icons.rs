@@ -22,16 +22,15 @@ pub fn describe(path: &str) -> ItemInfo {
         .and_then(|e| e.to_str())
         .map(|e| e.to_ascii_lowercase())
         .unwrap_or_default();
-    let kind = if p.is_dir() {
-        "folder"
-    } else {
-        match ext.as_str() {
-            "lnk" | "url" => "shortcut",
-            "exe" | "appref-ms" => "app",
-            _ => "file",
-        }
+    let kind = match ext.as_str() {
+        // A Mac app ("Safari.app") is really a folder, so check for it first.
+        "app" => "app",
+        _ if p.is_dir() => "folder",
+        "lnk" | "url" | "webloc" => "shortcut",
+        "exe" | "appref-ms" => "app",
+        _ => "file",
     };
-    // Shortcuts and apps read better without ".lnk" / ".exe", like on the desktop.
+    // Shortcuts and apps read better without ".lnk" / ".exe" / ".app", like on the desktop.
     let name = if kind == "shortcut" || kind == "app" {
         p.file_stem()
     } else {
@@ -179,9 +178,31 @@ fn trim_to_square(w: usize, h: usize, rgba: &[u8]) -> (usize, usize, Vec<u8>) {
     (side, side, out)
 }
 
+#[cfg(not(windows))]
+pub fn icon_png(_path: &str, _size: i32) -> Result<Vec<u8>, String> {
+    Err("icons are only available on Windows for now".into())
+}
+
 #[cfg(test)]
 mod tests {
-    use super::trim_to_square;
+    use super::{describe, trim_to_square};
+
+    #[test]
+    fn mac_app_is_an_app_not_a_folder() {
+        let dir = std::env::temp_dir().join("roomdesk-test").join("Notes.app");
+        std::fs::create_dir_all(&dir).unwrap();
+        let info = describe(&dir.to_string_lossy());
+        assert_eq!(info.kind, "app");
+        assert_eq!(info.name, "Notes");
+        let _ = std::fs::remove_dir_all(dir.parent().unwrap());
+    }
+
+    #[test]
+    fn windows_shortcut_and_mac_link() {
+        assert_eq!(describe(r"C:\Users\me\Desktop\Game.lnk").kind, "shortcut");
+        assert_eq!(describe("/Users/me/Desktop/News.webloc").kind, "shortcut");
+        assert_eq!(describe("/Users/me/Desktop/News.webloc").name, "News");
+    }
 
     #[test]
     fn small_icon_in_big_image_is_cropped() {
@@ -203,9 +224,4 @@ mod tests {
         let img = vec![255u8; 64 * 64 * 4];
         assert_eq!(trim_to_square(64, 64, &img).0, 64);
     }
-}
-
-#[cfg(not(windows))]
-pub fn icon_png(_path: &str, _size: i32) -> Result<Vec<u8>, String> {
-    Err("icons are only available on Windows for now".into())
 }

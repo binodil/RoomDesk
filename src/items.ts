@@ -13,6 +13,7 @@ import {
 } from "./decor";
 import type { SoundKind } from "./sound";
 import { DEFAULT_VIDEO, drawMap, getReading, shortName, youtubeEmbed, type MapView, type Place } from "./live";
+import { BIN_NAME, IS_MAC } from "./platform";
 import { BASE, Surfaces } from "./surfaces";
 import type { SurfaceName } from "./room";
 
@@ -195,7 +196,7 @@ function buildItem(item: Item, el: HTMLDivElement): void {
       el.innerHTML = stickerSvg(item.glyph);
       break;
     case "recycle":
-      el.innerHTML = '<div class="bin"></div><div class="name">Recycle Bin</div>';
+      el.innerHTML = `<div class="bin"></div><div class="name">${BIN_NAME}</div>`;
       break;
     case "fireplace":
       el.innerHTML = FIREPLACE_HTML;
@@ -241,7 +242,9 @@ function updateItem(item: Item, el: HTMLDivElement, now: number): void {
       break;
     case "recycle":
       (el.querySelector(".bin") as HTMLElement).innerHTML = recycleSvg(binItems);
-      el.title = binItems ? `Recycle Bin: ${binItems} item${binItems === 1 ? "" : "s"}` : "Recycle Bin (empty)";
+      // macOS keeps the Trash private, so its count isn't known there (yet).
+      if (IS_MAC) el.title = BIN_NAME;
+      else el.title = binItems ? `Recycle Bin: ${binItems} item${binItems === 1 ? "" : "s"}` : "Recycle Bin (empty)";
       break;
     case "thermometer":
     case "hygrometer": {

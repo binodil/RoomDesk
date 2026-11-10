@@ -40,7 +40,7 @@ npm run tauri dev      # run it
 npm run tauri build    # make the installer
 ```
 
-First time building? See [docs/SETUP.md](docs/SETUP.md). To publish a release, push a tag like `v1.0.0`: GitHub builds the installer and makes a draft release.
+First time building? See [docs/SETUP.md](docs/SETUP.md). On a Mac (early test version), see [docs/SETUP-mac.md](docs/SETUP-mac.md). To publish a release, push a tag like `v1.0.0`: GitHub builds the installer and makes a draft release.
 
 ## License
 

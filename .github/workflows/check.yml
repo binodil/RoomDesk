@@ -31,3 +31,30 @@ jobs:
       - name: Rust tests
         working-directory: src-tauri
         run: cargo test
+
+  # The Mac version (work in progress): make sure everything still builds on macOS.
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@1.99.0
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: npm ci
+      - name: Type-check and build the page
+        run: npm run build
+      - name: Lint the Rust code
+        working-directory: src-tauri
+        run: cargo clippy --all-targets -- -D warnings
+      - name: Rust tests
+        working-directory: src-tauri
+        run: cargo test
+      - name: Build the Mac app (unsigned)
+        run: npm run tauri build -- --bundles app

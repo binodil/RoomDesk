@@ -6,6 +6,7 @@ import { FocusEditor } from "./board";
 import { STICKERS, stickerSvg, tickClocks, tickDigital, type DecorKind } from "./decor";
 import { Items, isFile, parseLayout, type Item, type ItemInfo } from "./items";
 import { refreshMirrors } from "./mirror";
+import { BIN_NAME } from "./platform";
 import { Panels } from "./panels";
 import { setResting, syncSounds } from "./sound";
 import { POINT_NAMES, defaultCalibration, parseCalibration, type Calibration, type PointName } from "./room";
@@ -279,6 +280,8 @@ $("editAdd").addEventListener("click", async () => {
 // "Add item" menu: notes, pictures, whiteboard, mirror, clock, plant, rose, apple, stickers.
 const addMenu = $<HTMLDivElement>("addMenu");
 const addMenuBtn = $<HTMLButtonElement>("addMenuBtn");
+// "Recycle Bin" on Windows, "Trash" on a Mac.
+addMenu.querySelectorAll(".binname").forEach((el) => (el.textContent = BIN_NAME));
 $("stickerRow").innerHTML = Object.keys(STICKERS)
   .map((g) => `<button type="button" role="menuitem" data-add="sticker" data-glyph="${g}" aria-label="${g} sticker">${stickerSvg(g)}</button>`)
   .join("");

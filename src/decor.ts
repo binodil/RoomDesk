@@ -5,6 +5,8 @@
 // Everything here is drawn with plain HTML and SVG so it bends into the room's
 // perspective together with its surface.
 
+import { BIN_NAME } from "./platform";
+
 export type DecorKind =
   | "note" | "sticker" | "image" | "clock" | "plant" | "rose" | "apple" | "whiteboard" | "mirror"
   | "recycle" | "thermometer" | "hygrometer" | "map" | "window" | "fireplace" | "tv";
@@ -236,7 +238,7 @@ export function thermometerSvg(c: number | null, label: string): string {
   const ticks = Array.from({ length: 9 }, (_, i) => {
     const y = 150 - i * 15;
     return `<path d="M36 ${y}h${i % 2 ? 5 : 8}" stroke="#555" stroke-width="1"/>` +
-      (i % 2 ? "" : `<text x="47" y="${y + 3}" font-size="8" fill="#444" font-family="Segoe UI, sans-serif">${-30 + i * 10}</text>`);
+      (i % 2 ? "" : `<text x="47" y="${y + 3}" font-size="8" fill="#444" font-family="Segoe UI, -apple-system, system-ui, sans-serif">${-30 + i * 10}</text>`);
   }).join("");
   return `<svg viewBox="0 0 70 200" xmlns="http://www.w3.org/2000/svg">
     <rect x="4" y="4" width="62" height="192" rx="31" fill="#f7f5f0" stroke="#c9c4b8" stroke-width="2"/>
@@ -244,7 +246,7 @@ export function thermometerSvg(c: number | null, label: string): string {
     <rect x="24" y="22" width="10" height="140" rx="5" fill="#e6e2da" stroke="#bbb" stroke-width="1"/>
     ${c === null ? "" : `<rect x="26.5" y="${top}" width="5" height="${165 - top}" rx="2.5" fill="#d6283a"/>`}
     <circle cx="29" cy="168" r="11" fill="${c === null ? "#bbb" : "#d6283a"}" stroke="#bbb" stroke-width="1"/>
-    <text x="35" y="190" font-size="9" text-anchor="middle" fill="#555" font-family="Segoe UI, sans-serif">${escapeHtml(label)}</text>
+    <text x="35" y="190" font-size="9" text-anchor="middle" fill="#555" font-family="Segoe UI, -apple-system, system-ui, sans-serif">${escapeHtml(label)}</text>
   </svg>`;
 }
 
@@ -266,9 +268,9 @@ export function hygrometerSvg(h: number | null, label: string): string {
     <circle cx="50" cy="50" r="44" fill="#f7f5f0"/>
     ${arc(-120, -48, "#e8a33d")}${arc(-48, 48, "#4caf7a")}${arc(48, 120, "#4c8fd6")}
     ${ticks}
-    <text x="50" y="34" font-size="7" text-anchor="middle" fill="#666" font-family="Segoe UI, sans-serif">HUMIDITY %</text>
-    <text x="50" y="74" font-size="11" font-weight="600" text-anchor="middle" fill="#333" font-family="Segoe UI, sans-serif">${h === null ? "—" : Math.round(h)}</text>
-    <text x="50" y="86" font-size="6.5" text-anchor="middle" fill="#666" font-family="Segoe UI, sans-serif">${escapeHtml(label)}</text>
+    <text x="50" y="34" font-size="7" text-anchor="middle" fill="#666" font-family="Segoe UI, -apple-system, system-ui, sans-serif">HUMIDITY %</text>
+    <text x="50" y="74" font-size="11" font-weight="600" text-anchor="middle" fill="#333" font-family="Segoe UI, -apple-system, system-ui, sans-serif">${h === null ? "—" : Math.round(h)}</text>
+    <text x="50" y="86" font-size="6.5" text-anchor="middle" fill="#666" font-family="Segoe UI, -apple-system, system-ui, sans-serif">${escapeHtml(label)}</text>
     ${h === null ? "" : `<path d="M50 50 L50 15" stroke="#222" stroke-width="2" stroke-linecap="round" transform="rotate(${a} 50 50)"/>`}
     <circle cx="50" cy="50" r="3.5" fill="#222"/>
   </svg>`;
@@ -281,7 +283,7 @@ export const CLICK_ACTION: Partial<Record<DecorKind, string>> = {
   plant: "Click to water it",
   rose: "Click for a fresh rose",
   apple: "Click for a fresh apple",
-  recycle: "Click to open the Recycle Bin",
+  recycle: `Click to open the ${BIN_NAME}`,
   thermometer: "Click to choose the place",
   hygrometer: "Click to choose the place",
   map: "Click to move and zoom the map",

@@ -1,7 +1,9 @@
 //! Small pieces of Windows integration: starting with Windows, and noticing
 //! when a game, video or presentation fills the screen.
 
+#[cfg(windows)]
 const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
+#[cfg(windows)]
 const VALUE: &str = "RoomDesk";
 
 /// Whether RoomDesk starts when you sign in to Windows.
