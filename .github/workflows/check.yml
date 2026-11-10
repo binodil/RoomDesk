@@ -14,7 +14,9 @@ jobs:
         with:
           node-version: 22
           cache: npm
-      - uses: dtolnay/rust-toolchain@stable
+      # A fixed Rust version, so a new Rust release can't fail this check by itself.
+      # Raise it on purpose now and then.
+      - uses: dtolnay/rust-toolchain@1.99.0
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
