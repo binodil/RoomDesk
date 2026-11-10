@@ -102,6 +102,9 @@ fn sync_windows(app: &AppHandle, monitors: &[MonitorInfo]) {
                     // Used only if attaching to the wallpaper layer fails.
                     .always_on_bottom(true)
                     .focused(false)
+                    // macOS: the first click on a room also reaches the page, instead of
+                    // only bringing RoomDesk forward (no effect on Windows).
+                    .accept_first_mouse(true)
                     .visible(false)
                     // Tauri's usual WebView2 settings, plus letting the fireplace and window
                     // sounds start without a click (clicks reach the room through the mouse

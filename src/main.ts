@@ -45,6 +45,8 @@ const panels = new Panels();
 const PANEL_KINDS = new Set(["thermometer", "hygrometer", "map", "window", "tv"]);
 
 let calibration: Calibration = defaultCalibration();
+/** True until the corners are saved; the default then follows the screen's shape. */
+let calibrationIsDefault = true;
 let monitorKey = "";
 let monitorIndex = 0;
 let mode: Mode = "use";
@@ -76,8 +78,11 @@ async function findMonitor(): Promise<void> {
 
 async function loadMonitorData(): Promise<void> {
   try {
-    calibration = parseCalibration(await invoke("load_calibration", { monitor: monitorKey }));
+    const saved = await invoke("load_calibration", { monitor: monitorKey });
+    calibrationIsDefault = !saved;
+    calibration = parseCalibration(saved);
   } catch {
+    calibrationIsDefault = true;
     calibration = defaultCalibration();
   }
   try {
@@ -96,6 +101,7 @@ function debounce(fn: () => void, ms: number): () => void {
 }
 
 const saveCalibrationSoon = debounce(() => {
+  calibrationIsDefault = false;
   invoke("save_calibration", { monitor: monitorKey, calibration }).catch((e) => console.error(e));
 }, 250);
 
@@ -583,7 +589,11 @@ window.addEventListener("DOMContentLoaded", async () => {
     showGrid = e.payload;
     render();
   });
-  window.addEventListener("resize", render);
+  window.addEventListener("resize", () => {
+    // The window may get its final size after the page loaded.
+    if (calibrationIsDefault) calibration = defaultCalibration();
+    render();
+  });
   // Monitors rearranged: this window may now cover a different monitor.
   void getCurrentWindow().onMoved(async () => {
     const before = monitorKey;
