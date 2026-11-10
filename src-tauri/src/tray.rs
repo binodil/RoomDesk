@@ -8,7 +8,11 @@ use tauri::{
     AppHandle, Manager, Wry,
 };
 
-use crate::{monitors, settings, wallpaper};
+use tauri_plugin_opener::OpenerExt;
+
+use crate::{monitors, settings, system, wallpaper};
+
+const HOMEPAGE: &str = "https://github.com/binodil/RoomDesk";
 
 struct TrayItems {
     status: MenuItem<Wry>,
@@ -28,6 +32,10 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
     let pause = CheckMenuItem::with_id(app, "pause", "Pause", true, false, None::<&str>)?;
     let hide_icons =
         CheckMenuItem::with_id(app, "hide_icons", "Hide desktop icons", true, saved.hide_icons, None::<&str>)?;
+    let autostart =
+        CheckMenuItem::with_id(app, "autostart", "Start with Windows", true, system::autostart_enabled(), None::<&str>)?;
+    let version = app.package_info().version.to_string();
+    let about = MenuItem::with_id(app, "about", format!("About RoomDesk {version}"), true, None::<&str>)?;
     let exit = MenuItem::with_id(app, "exit", "Exit RoomDesk", true, None::<&str>)?;
 
     let menu = MenuBuilder::new(app)
@@ -39,14 +47,15 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
         .separator()
         .items(&[&calibrate, &grid])
         .separator()
-        .items(&[&pause, &hide_icons])
+        .items(&[&pause, &hide_icons, &autostart])
         .separator()
-        .item(&exit)
+        .items(&[&about, &exit])
         .build()?;
 
     let pause_item = pause.clone();
     let hide_item = hide_icons.clone();
     let grid_item = grid.clone();
+    let autostart_item = autostart.clone();
     let icon = app
         .default_window_icon()
         .cloned()
@@ -90,6 +99,16 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
                 if let Err(e) = settings::save(app, &s) {
                     eprintln!("RoomDesk: {e}");
                 }
+            }
+            "autostart" => {
+                let on = autostart_item.is_checked().unwrap_or(false);
+                if let Err(e) = system::set_autostart(on) {
+                    eprintln!("RoomDesk: {e}");
+                    let _ = autostart_item.set_checked(system::autostart_enabled());
+                }
+            }
+            "about" => {
+                let _ = app.opener().open_url(HOMEPAGE, None::<&str>);
             }
             "exit" => app.exit(0),
             _ => {}

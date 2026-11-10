@@ -1,0 +1,35 @@
+name: Release
+
+# Push a tag like v1.0.0 to build the Windows installer and attach it to a
+# draft GitHub release. Check the draft, then press Publish.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - run: npm ci
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: RoomDesk ${{ github.ref_name }}
+          releaseBody: |
+            Download **RoomDesk_x.y.z_x64-setup.exe** below and run it. No administrator rights needed.
+            After it starts, look for the cube icon in the taskbar tray (bottom right; it may be behind the ^ arrow).
+          releaseDraft: true

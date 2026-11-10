@@ -11,6 +11,18 @@ export const SOUND_NAMES: Record<SoundKind, string> = {
 };
 
 let ctx: AudioContext | null = null;
+/** True while a game or full-screen app is open: everything stays silent. */
+let resting = false;
+
+const shouldPlay = () => !document.hidden && !resting;
+
+/** Go silent (or come back) while something full-screen is open. */
+export function setResting(on: boolean): void {
+  resting = on;
+  if (!ctx) return;
+  if (shouldPlay()) void ctx.resume();
+  else void ctx.suspend();
+}
 let noise: AudioBuffer | null = null;
 
 function audio(): AudioContext {
@@ -22,11 +34,11 @@ function audio(): AudioContext {
     for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
     // When every room window is hidden (Pause in the tray), stay quiet.
     document.addEventListener("visibilitychange", () => {
-      if (document.hidden) void ctx?.suspend();
-      else void ctx?.resume();
+      if (shouldPlay()) void ctx?.resume();
+      else void ctx?.suspend();
     });
   }
-  if (ctx.state === "suspended" && !document.hidden) void ctx.resume();
+  if (ctx.state === "suspended" && shouldPlay()) void ctx.resume();
   return ctx;
 }
 

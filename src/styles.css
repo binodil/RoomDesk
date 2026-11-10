@@ -663,3 +663,6 @@ html, body {
 .tvset .nosignal { position: absolute; inset: 0; display: grid; place-items: center; color: #aaa; font: 500 calc(var(--s) * 0.04) "Segoe UI", sans-serif; }
 .tvset .tvbar { height: calc(var(--s) * 0.035); display: flex; align-items: center; justify-content: flex-end; padding-right: 3%; }
 .tvset .led { width: calc(var(--s) * 0.008); aspect-ratio: 1; border-radius: 50%; background: #e04848; box-shadow: 0 0 calc(var(--s) * 0.01) #e04848; }
+
+/* While a game or full-screen app is open, nothing moves. */
+.resting *, .resting *::before, .resting *::after { animation-play-state: paused !important; }
