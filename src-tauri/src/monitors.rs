@@ -122,8 +122,19 @@ fn sync_windows(app: &AppHandle, monitors: &[MonitorInfo]) {
 
         // Position first, then size: once the window is on the right monitor,
         // Windows applies that monitor's scaling before we set the size.
-        let _ = window.set_position(PhysicalPosition::new(m.x, m.y));
-        let _ = window.set_size(PhysicalSize::new(m.width, m.height));
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = window.set_position(PhysicalPosition::new(m.x, m.y));
+            let _ = window.set_size(PhysicalSize::new(m.width, m.height));
+        }
+        // macOS places windows in points, and each monitor's pixels are its points
+        // times its own scale (2 on a Retina screen), so convert with that scale.
+        #[cfg(target_os = "macos")]
+        {
+            let scale = m.scale_milli.max(1) as f64 / 1000.0;
+            let _ = window.set_position(tauri::LogicalPosition::new(m.x as f64 / scale, m.y as f64 / scale));
+            let _ = window.set_size(tauri::LogicalSize::new(m.width as f64 / scale, m.height as f64 / scale));
+        }
         let _ = window.show();
 
         // "Always at the back" would push the window below the wallpaper once it is

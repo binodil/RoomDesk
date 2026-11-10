@@ -36,6 +36,11 @@ windows = { version = "0.62", features = [
   "Win32_UI_WindowsAndMessaging",
 ] }
 
+# macOS-only: place the rooms on the desktop (the same versions Tauri already uses).
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+dispatch2 = "0.3"
+
 [profile.release]
 # Smaller, faster release build.
 codegen-units = 1

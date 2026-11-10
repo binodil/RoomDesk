@@ -1,8 +1,9 @@
 # Setup on a Mac (early test version)
 
-The Mac version is a work in progress. Right now RoomDesk runs on a Mac as a
-full-screen room kept behind your other windows. It doesn't sit in the real
-desktop layer yet, and file icons are simple placeholders. Those come next.
+The Mac version is a work in progress. RoomDesk becomes your desktop: the room
+sits behind every app window, on every monitor and every Space (virtual desktop),
+and covers Finder's desktop icons (put your files in the room instead).
+File icons are still simple placeholders; real icons come next.
 
 You need macOS 13 (Ventura) or newer. Apple Silicon (M1 and later) and Intel Macs both work.
 

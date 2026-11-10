@@ -2770,6 +2770,8 @@ name = "roomdesk"
 version = "1.0.0"
 dependencies = [
  "base64 0.23.1",
+ "dispatch2",
+ "objc2",
  "png",
  "serde",
  "serde_json",
