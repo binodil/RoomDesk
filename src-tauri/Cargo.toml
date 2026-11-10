@@ -41,7 +41,21 @@ windows = { version = "0.62", features = [
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
 dispatch2 = "0.3"
-objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSData", "NSDictionary", "NSGeometry"] }
+block2 = "0.6"
+objc2-foundation = { version = "0.3", default-features = false, features = [
+  "std",
+  "block2",
+  "NSArray",
+  "NSData",
+  "NSDictionary",
+  "NSGeometry",
+  "NSNotification",
+  "NSObject",
+  "NSOperation",
+  "NSString",
+  "NSURL",
+  "NSValue",
+] }
 objc2-app-kit = { version = "0.3", default-features = false, features = [
   "std",
   "objc2-core-graphics",
@@ -49,6 +63,7 @@ objc2-app-kit = { version = "0.3", default-features = false, features = [
   "NSGraphicsContext",
   "NSImage",
   "NSImageRep",
+  "NSScreen",
   "NSWorkspace",
 ] }
 

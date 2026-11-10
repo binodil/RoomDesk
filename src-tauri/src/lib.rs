@@ -5,6 +5,8 @@
 
 mod icons;
 mod input;
+#[cfg(target_os = "macos")]
+mod mac_wallpaper;
 mod monitors;
 mod recycle;
 mod settings;
@@ -84,6 +86,8 @@ pub(crate) fn pick_photo(app: &AppHandle) -> Result<bool, String> {
 
     // Tell every room window (one per monitor) to reload the photo.
     app.emit("photo-changed", ()).map_err(|e| e.to_string())?;
+    #[cfg(target_os = "macos")]
+    mac_wallpaper::apply(app);
     Ok(true)
 }
 
@@ -93,6 +97,8 @@ pub(crate) fn use_sample_room(app: &AppHandle) -> Result<(), String> {
     current.photo = None;
     current.calibrations.clear();
     settings::save(app, &current)?;
+    #[cfg(target_os = "macos")]
+    mac_wallpaper::apply(app);
     app.emit("photo-changed", ()).map_err(|e| e.to_string())
 }
 
@@ -363,6 +369,8 @@ pub fn run() {
             wallpaper::set_desktop_icons_visible(!settings::load(handle).hide_icons);
             input::start(handle);
             monitors::start(handle);
+            #[cfg(target_os = "macos")]
+            mac_wallpaper::start(handle);
             if settings::load(handle).hide_icons {
                 wallpaper::set_desktop_icons_visible(false);
             }
