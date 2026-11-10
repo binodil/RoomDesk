@@ -17,7 +17,7 @@ use std::{
     time::Duration,
 };
 
-use tauri::{AppHandle, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindowBuilder};
 
 use crate::wallpaper::{self, Mode};
 
@@ -238,8 +238,16 @@ pub fn start(app: &AppHandle) {
     sync_windows(app, &known);
 
     let app = app.clone();
+    let mut quiet = false;
     thread::spawn(move || loop {
         thread::sleep(Duration::from_secs(2));
+        // Rest (pause videos, sounds and animations) while something is full-screen.
+        // Our own rooms are full-screen while editing, so that doesn't count.
+        let busy = !is_front(&app) && crate::system::screen_busy();
+        if busy != quiet {
+            quiet = busy;
+            let _ = app.emit("quiet", quiet);
+        }
         let now = current_monitors(&app);
         // An empty list can happen for a moment while Windows switches displays; ignore it.
         if now.is_empty() {

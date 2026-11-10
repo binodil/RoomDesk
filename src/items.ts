@@ -301,7 +301,9 @@ function updateItem(item: Item, el: HTMLDivElement, now: number): void {
 
 /** While the TV is open big, the one on the wall stays quiet. */
 let tvHushed = false;
-const tvMuted = (item: Item) => !!item.muted || tvHushed;
+/** While a game or full-screen app is open, TVs pause to save power. */
+let tvResting = false;
+const tvMuted = (item: Item) => !!item.muted || tvHushed || tvResting;
 
 /** Tell a TV's YouTube player to match the item's sound settings. */
 function tvAudio(item: Item, el: HTMLElement): void {
@@ -314,6 +316,7 @@ function tvAudio(item: Item, el: HTMLElement): void {
     send("unMute");
     send("setVolume", [Math.round((item.volume ?? 0.5) * 100)]);
   }
+  send(tvResting ? "pauseVideo" : "playVideo");
 }
 
 /** The wall map is drawn at this size and then scaled to the item. */
@@ -481,6 +484,12 @@ export class Items {
       const el = this.els.get(item.id);
       if (el && item.kind === "tv") tvAudio(item, el);
     }
+  }
+
+  /** Pause the TVs while a game or full-screen app is open. */
+  restTv(on: boolean): void {
+    tvResting = on;
+    this.syncTv();
   }
 
   /** Quiet the TVs on the wall while one is being watched big. */

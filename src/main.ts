@@ -7,7 +7,7 @@ import { STICKERS, stickerSvg, tickClocks, tickDigital, type DecorKind } from ".
 import { Items, isFile, parseLayout, type Item, type ItemInfo } from "./items";
 import { refreshMirrors } from "./mirror";
 import { Panels } from "./panels";
-import { syncSounds } from "./sound";
+import { setResting, syncSounds } from "./sound";
 import { POINT_NAMES, defaultCalibration, parseCalibration, type Calibration, type PointName } from "./room";
 import { BASE, SURFACE_NAMES, Surfaces } from "./surfaces";
 
@@ -556,6 +556,12 @@ window.addEventListener("DOMContentLoaded", async () => {
     // "use" after a zoomed-in item closed is just the echo of finishing; nothing to do.
     if (e.payload === "use" && mode === "use") return;
     setMode(e.payload);
+  });
+  // A game, video or presentation is full-screen: nobody sees the room, so rest.
+  void listen<boolean>("quiet", (e) => {
+    document.body.classList.toggle("resting", e.payload);
+    setResting(e.payload);
+    items.restTv(e.payload);
   });
   void listen<boolean>("grid", (e) => {
     showGrid = e.payload;

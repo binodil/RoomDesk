@@ -8,6 +8,7 @@ mod input;
 mod monitors;
 mod recycle;
 mod settings;
+mod system;
 mod tray;
 mod wallpaper;
 
@@ -316,7 +317,16 @@ fn restore_desktop() {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // If RoomDesk stops unexpectedly, don't leave the desktop without its icons.
+    let default_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        restore_desktop();
+        default_hook(info);
+    }));
+
     let app = tauri::Builder::default()
+        // Starting RoomDesk again while it runs does nothing (one room per monitor is enough).
+        .plugin(tauri_plugin_single_instance::init(|_app, _args, _cwd| {}))
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(IconCache::default())
