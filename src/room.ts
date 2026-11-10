@@ -41,21 +41,57 @@ export const SURFACE_LABELS: Record<SurfaceName, string> = {
   ceiling: "Ceiling",
 };
 
-/** Matches the built-in sample room picture exactly. */
-export function defaultCalibration(): Calibration {
-  return {
-    version: 1,
-    points: {
-      backTL: { x: 330 / 1920, y: 172 / 1080 },
-      backTR: { x: 1588 / 1920, y: 172 / 1080 },
-      backBR: { x: 1588 / 1920, y: 866 / 1080 },
-      backBL: { x: 330 / 1920, y: 866 / 1080 },
-      frontTL: { x: 0, y: 0 },
-      frontTR: { x: 1, y: 0 },
-      frontBR: { x: 1, y: 1 },
-      frontBL: { x: 0, y: 1 },
-    },
-  };
+/** The built-in sample room picture's shape (1920 × 1080). */
+const SAMPLE_ASPECT = 1920 / 1080;
+
+/** The sample room's corners, as fractions of the picture itself. */
+const SAMPLE_POINTS: Record<PointName, Point> = {
+  backTL: { x: 330 / 1920, y: 172 / 1080 },
+  backTR: { x: 1588 / 1920, y: 172 / 1080 },
+  backBR: { x: 1588 / 1920, y: 866 / 1080 },
+  backBL: { x: 330 / 1920, y: 866 / 1080 },
+  frontTL: { x: 0, y: 0 },
+  frontTR: { x: 1, y: 0 },
+  frontBR: { x: 1, y: 1 },
+  frontBL: { x: 0, y: 1 },
+};
+
+const BACK_OF: Record<string, PointName> = {
+  frontTL: "backTL", frontTR: "backTR", frontBR: "backBR", frontBL: "backBL",
+};
+
+/**
+ * Matches the built-in sample room picture on a screen of this size.
+ *
+ * The picture fills the screen and is cropped at the sides or top and bottom
+ * when the screen has another shape (a MacBook is 16:10, the picture 16:9), so
+ * the corners move with that crop. Front corners that end up off-screen slide
+ * back along their room edge until they are on the screen's border again.
+ */
+export function defaultCalibration(width = window.innerWidth, height = window.innerHeight): Calibration {
+  const screenAspect = width > 0 && height > 0 ? width / height : SAMPLE_ASPECT;
+  // How much of the picture shows across and down (1 = all of it).
+  const sx = Math.min(1, screenAspect / SAMPLE_ASPECT);
+  const sy = Math.min(1, SAMPLE_ASPECT / screenAspect);
+  const toScreen = (p: Point): Point => ({ x: 0.5 + (p.x - 0.5) / sx, y: 0.5 + (p.y - 0.5) / sy });
+
+  const points = {} as Record<PointName, Point>;
+  for (const name of POINT_NAMES) points[name] = toScreen(SAMPLE_POINTS[name]);
+  for (const [front, back] of Object.entries(BACK_OF)) {
+    points[front as PointName] = toBorder(points[back], points[front as PointName]);
+  }
+  return { version: 1, points };
+}
+
+/** Walk from `inside` towards `outside` and stop at the screen's border (0..1). */
+function toBorder(inside: Point, outside: Point): Point {
+  let t = 1;
+  for (const axis of ["x", "y"] as const) {
+    const d = outside[axis] - inside[axis];
+    if (outside[axis] < 0 && d !== 0) t = Math.min(t, (0 - inside[axis]) / d);
+    if (outside[axis] > 1 && d !== 0) t = Math.min(t, (1 - inside[axis]) / d);
+  }
+  return { x: inside.x + (outside.x - inside.x) * t, y: inside.y + (outside.y - inside.y) * t };
 }
 
 /** Accept only well-formed saved data; anything else falls back to the default. */

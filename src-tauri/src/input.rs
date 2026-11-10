@@ -32,7 +32,7 @@ pub struct Region {
 }
 
 #[derive(Debug, Clone, Serialize)]
-#[cfg_attr(not(windows), allow(dead_code))]
+#[cfg_attr(not(any(windows, target_os = "macos")), allow(dead_code))]
 pub struct Activate {
     /// Which monitor's room (0 = first).
     pub monitor: usize,
@@ -45,6 +45,9 @@ pub struct MonitorRect {
     pub y: i32,
     pub w: u32,
     pub h: u32,
+    /// Pixels per point (macOS clicks come in points).
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
+    pub scale: f64,
 }
 
 static APP: OnceLock<AppHandle> = OnceLock::new();
@@ -72,7 +75,7 @@ pub fn set_regions(monitor: usize, list: Vec<Region>) {
     regions().lock().unwrap_or_else(|e| e.into_inner()).insert(monitor, list);
 }
 
-/// The room item under a screen point, if any.
+/// The room item under a screen point (in pixels), if any.
 #[cfg_attr(not(windows), allow(dead_code))]
 fn hit(x: i32, y: i32) -> Option<(usize, String)> {
     let mons = monitors().lock().ok()?.clone();
@@ -80,7 +83,26 @@ fn hit(x: i32, y: i32) -> Option<(usize, String)> {
         .iter()
         .enumerate()
         .find(|(_, m)| x >= m.x && y >= m.y && x < m.x + m.w as i32 && y < m.y + m.h as i32)?;
-    let (lx, ly) = ((x - m.x) as f64, (y - m.y) as f64);
+    hit_on(index, (x - m.x) as f64, (y - m.y) as f64)
+}
+
+/// The room item under a screen point given in points (macOS), if any.
+#[cfg(target_os = "macos")]
+fn hit_points(x: f64, y: f64) -> Option<(usize, String)> {
+    let mons = monitors().lock().ok()?.clone();
+    // Each monitor's pixel rectangle is its point rectangle times its own scale.
+    let (index, m) = mons.iter().enumerate().find(|(_, m)| {
+        let s = m.scale.max(0.1);
+        let (left, top) = (m.x as f64 / s, m.y as f64 / s);
+        x >= left && y >= top && x < left + m.w as f64 / s && y < top + m.h as f64 / s
+    })?;
+    let s = m.scale.max(0.1);
+    hit_on(index, (x - m.x as f64 / s) * s, (y - m.y as f64 / s) * s)
+}
+
+/// The room item at a point (in pixels) on one monitor.
+#[cfg_attr(not(any(windows, target_os = "macos")), allow(dead_code))]
+fn hit_on(index: usize, lx: f64, ly: f64) -> Option<(usize, String)> {
     let regions = regions().lock().ok()?;
     // Last drawn is on top, so search from the end.
     regions.get(&index)?.iter().rev().find(|r| lx >= r.x && ly >= r.y && lx <= r.x + r.w && ly <= r.y + r.h).map(|r| (index, r.id.clone()))
@@ -90,7 +112,13 @@ pub fn start(app: &AppHandle) {
     let _ = APP.set(app.clone());
     #[cfg(windows)]
     windows_hook::start();
+    #[cfg(target_os = "macos")]
+    mac_tap::start();
 }
+
+/// macOS: the same idea as the Windows hook, used while Finder's icons are shown on top of the room.
+#[cfg(target_os = "macos")]
+mod mac_tap;
 
 #[cfg(windows)]
 mod windows_hook {

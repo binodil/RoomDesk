@@ -17,7 +17,7 @@ use std::{
     time::Duration,
 };
 
-use tauri::{AppHandle, Emitter, Manager, PhysicalPosition, PhysicalSize, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
 use crate::wallpaper::{self, Mode};
 
@@ -102,6 +102,9 @@ fn sync_windows(app: &AppHandle, monitors: &[MonitorInfo]) {
                     // Used only if attaching to the wallpaper layer fails.
                     .always_on_bottom(true)
                     .focused(false)
+                    // macOS: the first click on a room also reaches the page, instead of
+                    // only bringing RoomDesk forward (no effect on Windows).
+                    .accept_first_mouse(true)
                     .visible(false)
                     // Tauri's usual WebView2 settings, plus letting the fireplace and window
                     // sounds start without a click (clicks reach the room through the mouse
@@ -122,8 +125,19 @@ fn sync_windows(app: &AppHandle, monitors: &[MonitorInfo]) {
 
         // Position first, then size: once the window is on the right monitor,
         // Windows applies that monitor's scaling before we set the size.
-        let _ = window.set_position(PhysicalPosition::new(m.x, m.y));
-        let _ = window.set_size(PhysicalSize::new(m.width, m.height));
+        #[cfg(not(target_os = "macos"))]
+        {
+            let _ = window.set_position(tauri::PhysicalPosition::new(m.x, m.y));
+            let _ = window.set_size(tauri::PhysicalSize::new(m.width, m.height));
+        }
+        // macOS places windows in points, and each monitor's pixels are its points
+        // times its own scale (2 on a Retina screen), so convert with that scale.
+        #[cfg(target_os = "macos")]
+        {
+            let scale = m.scale_milli.max(1) as f64 / 1000.0;
+            let _ = window.set_position(tauri::LogicalPosition::new(m.x as f64 / scale, m.y as f64 / scale));
+            let _ = window.set_size(tauri::LogicalSize::new(m.width as f64 / scale, m.height as f64 / scale));
+        }
         let _ = window.show();
 
         // "Always at the back" would push the window below the wallpaper once it is
@@ -150,7 +164,13 @@ fn sync_windows(app: &AppHandle, monitors: &[MonitorInfo]) {
     crate::input::set_monitors(
         monitors
             .iter()
-            .map(|m| crate::input::MonitorRect { x: m.x, y: m.y, w: m.width, h: m.height })
+            .map(|m| crate::input::MonitorRect {
+                x: m.x,
+                y: m.y,
+                w: m.width,
+                h: m.height,
+                scale: m.scale_milli.max(1) as f64 / 1000.0,
+            })
             .collect(),
     );
     if front {

@@ -178,9 +178,31 @@ fn trim_to_square(w: usize, h: usize, rgba: &[u8]) -> (usize, usize, Vec<u8>) {
     (side, side, out)
 }
 
-#[cfg(not(windows))]
+/// The macOS icon for `path` (the same one Finder shows) as PNG bytes, `size` pixels square.
+#[cfg(target_os = "macos")]
+pub fn icon_png(path: &str, size: i32) -> Result<Vec<u8>, String> {
+    use objc2::AllocAnyThread;
+    use objc2_app_kit::{NSBitmapImageFileType, NSBitmapImageRep, NSWorkspace};
+    use objc2_foundation::{NSDictionary, NSPoint, NSRect, NSSize, NSString};
+
+    objc2::rc::autoreleasepool(|_| {
+        let image = NSWorkspace::sharedWorkspace().iconForFile(&NSString::from_str(path));
+        let side = size as f64;
+        image.setSize(NSSize::new(side, side));
+        let mut rect = NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(side, side));
+        // Ask for the icon drawn at exactly this size (icons hold several sizes).
+        let cg = unsafe { image.CGImageForProposedRect_context_hints(&mut rect, None, None) }
+            .ok_or("macOS gave no icon")?;
+        let bitmap = NSBitmapImageRep::initWithCGImage(NSBitmapImageRep::alloc(), &cg);
+        let png = unsafe { bitmap.representationUsingType_properties(NSBitmapImageFileType::PNG, &NSDictionary::new()) }
+            .ok_or("could not turn the icon into a PNG")?;
+        Ok(png.to_vec())
+    })
+}
+
+#[cfg(not(any(windows, target_os = "macos")))]
 pub fn icon_png(_path: &str, _size: i32) -> Result<Vec<u8>, String> {
-    Err("icons are only available on Windows for now".into())
+    Err("icons are only available on Windows and macOS".into())
 }
 
 #[cfg(test)]
