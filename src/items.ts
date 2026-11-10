@@ -8,7 +8,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { boardHtml, deleteBoard, loadBoard } from "./board";
 import {
-  CLOCK_HTML, DECOR_KINDS, FIREPLACE_HTML, DECOR_SIZE, DIGITAL_CLOCK_HTML, NOTE_COLORS, STICKERS, appleSvg, daysSince, escapeHtml,
+  CLOCK_HTML, DECOR_KINDS, FIREPLACE_HTML, SEA_VIEW, DECOR_SIZE, DIGITAL_CLOCK_HTML, NOTE_COLORS, STICKERS, appleSvg, daysSince, escapeHtml,
   hygrometerSvg, plantSvg, recycleSvg, roseSvg, stickerSvg, thermometerSvg, tickClocks, tickDigital, type DecorKind,
 } from "./decor";
 import type { SoundKind } from "./sound";
@@ -53,12 +53,14 @@ export type Item = {
   view?: MapView;
   /** Window: the YouTube link it plays (when it has no picture in `path`). */
   url?: string;
-  /** Window and fireplace: the sound it makes, and how loud (0–1). */
+  /** Window and fireplace: the sound it makes. Window, fireplace and TV: how loud (0–1). */
   sound?: SoundKind | "none";
   volume?: number;
+  /** TV: sound off. */
+  muted?: boolean;
 };
 
-export type Layout = { version: 1; items: Item[] };
+export type Layout = { version: 2; items: Item[] };
 
 export type ItemInfo = { path: string; name: string; kind: ItemKind };
 
@@ -72,7 +74,7 @@ const KINDS: ItemKind[] = [...FILE_KINDS, ...DECOR_KINDS];
 
 /** Items that do something when clicked behind the desktop icons. Others let clicks through to the desktop. */
 const CLICKABLE: ItemKind[] = [
-  "note", "whiteboard", "plant", "rose", "apple", "recycle", "thermometer", "hygrometer", "map", "window", "fireplace",
+  "note", "whiteboard", "plant", "rose", "apple", "recycle", "thermometer", "hygrometer", "map", "window", "fireplace", "tv",
 ];
 const SOUNDS = ["fire", "ocean", "wind", "rain", "none"];
 export const isClickable = (kind: ItemKind) => isFile(kind) || CLICKABLE.includes(kind);
@@ -81,11 +83,14 @@ const SURFACES_OK = new Set(["back", "left", "right", "floor", "ceiling"]);
 export function parseLayout(data: unknown): Layout {
   const items: Item[] = [];
   const list = (data as { items?: unknown })?.items;
+  const version = Number((data as { version?: unknown })?.version) || 1;
   if (Array.isArray(list)) {
     for (const raw of list) {
       const r = raw as Partial<Item>;
       if (typeof r.id !== "string" || !SURFACES_OK.has(r.surface as string)) continue;
-      const kind = KINDS.includes(r.kind as ItemKind) ? (r.kind as ItemKind) : "file";
+      let kind = KINDS.includes(r.kind as ItemKind) ? (r.kind as ItemKind) : "file";
+      // Before version 2, a window without a picture played a YouTube video. That is a TV now.
+      if (version < 2 && kind === "window" && typeof r.path !== "string") kind = "tv";
       if ((isFile(kind) || kind === "image") && typeof r.path !== "string") continue;
       const item: Item = {
         id: r.id,
@@ -107,6 +112,7 @@ export function parseLayout(data: unknown): Layout {
       if (r.unit === "C" || r.unit === "F") item.unit = r.unit;
       if (typeof r.url === "string") item.url = r.url;
       if (SOUNDS.includes(r.sound as string) && (kind === "window" || kind === "fireplace")) item.sound = r.sound;
+      if (typeof r.muted === "boolean") item.muted = r.muted;
       if (Number.isFinite(r.volume)) item.volume = Math.min(1, Math.max(0, Number(r.volume)));
       const place = r.place as Partial<Place> | undefined;
       if (place && Number.isFinite(place.lat) && Number.isFinite(place.lon)) {
@@ -119,7 +125,7 @@ export function parseLayout(data: unknown): Layout {
       items.push(item);
     }
   }
-  return { version: 1, items };
+  return { version: 2, items };
 }
 
 const clamp01 = (v: number) => (Number.isFinite(v) ? Math.min(1, Math.max(0, v)) : 0.5);
@@ -263,16 +269,9 @@ function updateItem(item: Item, el: HTMLDivElement, now: number): void {
       break;
     }
     case "window": {
-      let view = "";
-      if (item.path) {
-        view = '<img class="outside" alt="" draggable="false">';
-      } else {
-        const src = youtubeEmbed(item.url ?? DEFAULT_VIDEO, { muted: true, controls: false });
-        if (src) {
-          view = `<iframe src="${escapeHtml(src)}" title="Window" allow="autoplay; encrypted-media" referrerpolicy="strict-origin-when-cross-origin" tabindex="-1"></iframe>`;
-        }
-      }
-      el.innerHTML = `<div class="winframe"><div class="glass">${view}</div><div class="mull"></div><div class="shine"></div></div><div class="sill"></div>`;
+      el.innerHTML =
+        `<div class="winframe"><div class="glass">${item.path ? '<img class="outside" alt="" draggable="false">' : SEA_VIEW}</div>` +
+        '<div class="mull"></div><div class="shine"></div></div><div class="sill"></div>';
       if (item.path) {
         const img = el.querySelector("img") as HTMLImageElement;
         void pictureFor(item.path).then((src) => {
@@ -281,8 +280,39 @@ function updateItem(item: Item, el: HTMLDivElement, now: number): void {
       }
       break;
     }
+    case "tv": {
+      // Starts with the sound it should have; later changes go through tvAudio().
+      const src = youtubeEmbed(item.url ?? DEFAULT_VIDEO, { muted: tvMuted(item), controls: false, api: true });
+      el.innerHTML =
+        '<div class="tvset"><div class="screen">' +
+        (src
+          ? `<iframe src="${escapeHtml(src)}" title="TV" allow="autoplay; encrypted-media" referrerpolicy="strict-origin-when-cross-origin" tabindex="-1"></iframe>`
+          : '<div class="nosignal">No signal</div>') +
+        '</div><div class="tvbar"><span class="led"></span></div></div>';
+      const frame = el.querySelector("iframe");
+      // The player needs a moment after loading before it listens; tell it a few times.
+      frame?.addEventListener("load", () => [500, 2000, 5000].forEach((ms) => setTimeout(() => tvAudio(item, el), ms)));
+      break;
+    }
     default:
       break;
+  }
+}
+
+/** While the TV is open big, the one on the wall stays quiet. */
+let tvHushed = false;
+const tvMuted = (item: Item) => !!item.muted || tvHushed;
+
+/** Tell a TV's YouTube player to match the item's sound settings. */
+function tvAudio(item: Item, el: HTMLElement): void {
+  const win = el.querySelector("iframe")?.contentWindow;
+  if (!win) return;
+  const send = (func: string, args: unknown[] = []) =>
+    win.postMessage(JSON.stringify({ event: "command", func, args }), "https://www.youtube.com");
+  if (tvMuted(item)) send("mute");
+  else {
+    send("unMute");
+    send("setVolume", [Math.round((item.volume ?? 0.5) * 100)]);
   }
 }
 
@@ -299,6 +329,7 @@ function drawKey(item: Item, now: number): string {
   return [
     item.text, item.color, item.since, item.watered, item.style, item.unit, item.url,
     item.kind === "window" ? item.path : "",
+    item.kind === "tv" ? item.url ?? "" : "",
     item.place && `${item.place.lat},${item.place.lon},${item.place.name}`,
     item.view && `${item.view.lat},${item.view.lon},${item.view.zoom}`,
     item.kind === "recycle" ? binItems : "",
@@ -313,7 +344,7 @@ const STANDS: ItemKind[] = ["plant", "rose", "apple", "recycle", "fireplace"];
 const standsUp = (item: Item) => item.surface === "floor" && STANDS.includes(item.kind);
 
 export class Items {
-  layout: Layout = { version: 1, items: [] };
+  layout: Layout = { version: 2, items: [] };
   selectedId: string | null = null;
   private els = new Map<string, HTMLDivElement>();
   /** Screen-space layer for things standing on the floor. */
@@ -444,6 +475,20 @@ export class Items {
     return out;
   }
 
+  /** Bring every TV's sound in line with its settings (cheap; call after changes). */
+  syncTv(): void {
+    for (const item of this.layout.items) {
+      const el = this.els.get(item.id);
+      if (el && item.kind === "tv") tvAudio(item, el);
+    }
+  }
+
+  /** Quiet the TVs on the wall while one is being watched big. */
+  hushTv(on: boolean): void {
+    tvHushed = on;
+    this.syncTv();
+  }
+
   get hasRecycleBin(): boolean {
     return this.layout.items.some((i) => i.kind === "recycle");
   }
@@ -528,6 +573,7 @@ export class Items {
     if (kind === "plant") item.watered = now;
     if (kind === "fireplace") item.sound ??= "fire";
     if (kind === "clock") item.style ??= "analog";
+    if (kind === "tv") item.volume ??= 0.5;
     this.layout.items.push(item);
     this.selectedId = item.id;
     this.render();

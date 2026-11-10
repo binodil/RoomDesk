@@ -36,10 +36,11 @@ const items = new Items(surfaces, () => {
   updateRemoveButton();
   refreshMirrorsSoon();
   syncSounds(items.sounds());
+  items.syncTv();
 });
 const focusEditor = new FocusEditor();
 const panels = new Panels();
-const PANEL_KINDS = new Set(["thermometer", "hygrometer", "map", "window"]);
+const PANEL_KINDS = new Set(["thermometer", "hygrometer", "map", "window", "tv"]);
 
 let calibration: Calibration = defaultCalibration();
 let monitorKey = "";
@@ -308,6 +309,7 @@ const START_SPOTS: Record<DecorKind, [number, number]> = {
   map: [0.25, 0.4],
   window: [0.6, 0.38],
   fireplace: [0.5, 0.8],
+  tv: [0.5, 0.42],
 };
 
 addMenu.addEventListener("click", async (e) => {
@@ -426,11 +428,13 @@ function openFocus(id: string): void {
     }
   };
   if (PANEL_KINDS.has(item.kind)) {
+    if (item.kind === "tv") items.hushTv(true);
     panels.open(
       item,
       (changes) => items.update(id, changes),
       (changes) => {
         items.update(id, changes);
+        items.hushTv(false);
         leave();
       },
     );
@@ -488,6 +492,7 @@ function activate(id: string): void {
     case "hygrometer":
     case "map":
     case "window":
+    case "tv":
       openFocus(id);
       break;
     default:
