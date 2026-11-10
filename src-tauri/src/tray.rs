@@ -22,6 +22,7 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
     let screens = MenuItem::with_id(app, "monitors", "Monitors: …", false, None::<&str>)?;
     let choose = MenuItem::with_id(app, "choose", "Choose room photo…", true, None::<&str>)?;
     let sample = MenuItem::with_id(app, "sample", "Use sample room", true, None::<&str>)?;
+    let edit = MenuItem::with_id(app, "edit", "Edit items…", true, None::<&str>)?;
     let calibrate = MenuItem::with_id(app, "calibrate", "Calibrate room…", true, None::<&str>)?;
     let grid = CheckMenuItem::with_id(app, "grid", "Show test grid", true, saved.show_grid, None::<&str>)?;
     let pause = CheckMenuItem::with_id(app, "pause", "Pause", true, false, None::<&str>)?;
@@ -31,6 +32,8 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
 
     let menu = MenuBuilder::new(app)
         .items(&[&status, &screens])
+        .separator()
+        .item(&edit)
         .separator()
         .items(&[&choose, &sample])
         .separator()
@@ -69,7 +72,8 @@ pub fn create(app: &AppHandle) -> tauri::Result<()> {
                     eprintln!("RoomDesk: {e}");
                 }
             }
-            "calibrate" => crate::start_calibration(app),
+            "edit" => crate::start_front_mode(app, "edit"),
+            "calibrate" => crate::start_front_mode(app, "calibrate"),
             "grid" => {
                 let show = grid_item.is_checked().unwrap_or(true);
                 crate::set_show_grid(app, show);

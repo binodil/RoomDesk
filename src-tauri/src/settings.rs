@@ -24,11 +24,14 @@ pub struct Settings {
     /// The page decides the format; Rust only stores it.
     #[serde(default)]
     pub calibrations: HashMap<String, serde_json::Value>,
+    /// Items placed in the room for each monitor (same key as calibrations).
+    #[serde(default)]
+    pub layouts: HashMap<String, serde_json::Value>,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { photo: None, hide_icons: false, show_grid: true, calibrations: HashMap::new() }
+        Self { photo: None, hide_icons: false, show_grid: true, calibrations: HashMap::new(), layouts: HashMap::new() }
     }
 }
 
