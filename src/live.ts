@@ -151,7 +151,7 @@ export function drawMap(container: HTMLElement, view: MapView, w: number, h: num
 export const DEFAULT_VIDEO = "https://www.youtube.com/watch?v=21X5lGlDOfg";
 
 /** The YouTube embed address for a link someone pasted, or null if it isn't a YouTube link. */
-export function youtubeEmbed(link: string, opts: { muted: boolean; controls: boolean }): string | null {
+export function youtubeEmbed(link: string, opts: { muted: boolean; controls: boolean; api?: boolean }): string | null {
   const s = link.trim();
   let path: string | null = null;
   const id = s.match(/(?:youtube\.com\/(?:watch\?(?:.*&)?v=|live\/|embed\/|shorts\/)|youtu\.be\/)([\w-]{11})/);
@@ -163,6 +163,8 @@ export function youtubeEmbed(link: string, opts: { muted: boolean; controls: boo
     autoplay: "1",
     mute: opts.muted ? "1" : "0",
     controls: opts.controls ? "1" : "0",
+    // Lets the room turn the sound on and off without reloading the video.
+    ...(opts.api ? { enablejsapi: "1", origin: window.location.origin } : {}),
     playsinline: "1",
     rel: "0",
   });

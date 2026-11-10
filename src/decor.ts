@@ -7,11 +7,11 @@
 
 export type DecorKind =
   | "note" | "sticker" | "image" | "clock" | "plant" | "rose" | "apple" | "whiteboard" | "mirror"
-  | "recycle" | "thermometer" | "hygrometer" | "map" | "window" | "fireplace";
+  | "recycle" | "thermometer" | "hygrometer" | "map" | "window" | "fireplace" | "tv";
 
 export const DECOR_KINDS: DecorKind[] = [
   "note", "sticker", "image", "clock", "plant", "rose", "apple", "whiteboard", "mirror",
-  "recycle", "thermometer", "hygrometer", "map", "window", "fireplace",
+  "recycle", "thermometer", "hygrometer", "map", "window", "fireplace", "tv",
 ];
 
 /** Size (fraction of the surface height) a new item starts at. */
@@ -31,6 +31,7 @@ export const DECOR_SIZE: Record<DecorKind, number> = {
   map: 0.4,
   window: 0.42,
   fireplace: 0.42,
+  tv: 0.5,
 };
 
 export const NOTE_COLORS = ["#fde68a", "#fbcfe8", "#bfdbfe", "#bbf7d0", "#fed7aa"];
@@ -284,8 +285,9 @@ export const CLICK_ACTION: Partial<Record<DecorKind, string>> = {
   thermometer: "Click to choose the place",
   hygrometer: "Click to choose the place",
   map: "Click to move and zoom the map",
-  window: "Click to change the view and sound",
+  window: "Click to change the view and the sound outside",
   fireplace: "Click to turn the fire sound on or off",
+  tv: "Click to watch it big, change the channel or the sound",
 };
 
 export const FIREPLACE_HTML =
@@ -293,3 +295,15 @@ export const FIREPLACE_HTML =
   '<div class="glow"></div><div class="flames"><i></i><i></i><i></i><i></i><i></i><i></i></div>' +
   '<div class="logs"><b></b><b></b></div><div class="embers"><s></s><s></s><s></s></div>' +
   '</div></div><div class="fpbase"></div></div>';
+
+/** The view from a new window until you choose a picture: the sea at dusk. */
+export const SEA_VIEW = `<svg class="outside" viewBox="0 0 160 120" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg">
+  <defs><linearGradient id="dusk" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3b4c7a"/><stop offset=".55" stop-color="#d98a7a"/><stop offset=".7" stop-color="#f6c890"/></linearGradient>
+  <linearGradient id="sea" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#5a6f98"/><stop offset="1" stop-color="#22304f"/></linearGradient></defs>
+  <rect width="160" height="120" fill="url(#dusk)"/>
+  <circle cx="104" cy="72" r="11" fill="#ffe2b0" opacity=".95"/>
+  <path d="M0 70 30 62 52 67 80 60 112 68 136 63 160 69V80H0z" fill="#6b5f86" opacity=".7"/>
+  <rect y="76" width="160" height="44" fill="url(#sea)"/>
+  <path d="M96 78h16M92 84h24M98 90h12M88 97h32" stroke="#ffd9a0" stroke-width="1.2" opacity=".75"/>
+  <path d="M8 88h30M50 95h24M120 104h30M20 108h40" stroke="#8ea3c8" stroke-width="1" opacity=".6"/>
+</svg>`;

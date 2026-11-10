@@ -472,7 +472,7 @@ html, body {
   font-size: 14px;
   user-select: text;
 }
-.panelbox[data-kind="map"], .panelbox[data-kind="window"] { width: min(1200px, 100%); }
+.panelbox[data-kind="map"], .panelbox[data-kind="window"], .panelbox[data-kind="tv"] { width: min(1200px, 100%); }
 .panelbox h2 { margin: 0; font-size: 18px; font-weight: 600; }
 .panelbox .reading { font: 600 54px/1.1 "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif; font-variant-numeric: tabular-nums; }
 .panelbox .where { color: var(--ink-dim); }
@@ -579,6 +579,7 @@ html, body {
 /* Crop the video a little so the player's edges and logo stay out of view. */
 .winframe iframe { position: absolute; left: -12%; top: -12%; width: 124%; height: 124%; border: 0; pointer-events: none; }
 .winframe .outside { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.player svg { width: 100%; height: 100%; }
 .winframe .mull::before, .winframe .mull::after { content: ""; position: absolute; background: #f4f2ec; box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12); }
 .winframe .mull::before { left: 50%; top: 0; bottom: 0; width: calc(var(--s) * 0.022); transform: translateX(-50%); }
 .winframe .mull::after { top: 45%; left: 0; right: 0; height: calc(var(--s) * 0.022); }
@@ -648,3 +649,17 @@ html, body {
 @media (prefers-reduced-motion: reduce) {
   .fireplace .flames i, .fireplace .glow, .fireplace .embers s { animation: none; }
 }
+
+/* TV */
+.tvset {
+  padding: 2.2% 2.2% 0;
+  border-radius: calc(var(--s) * 0.012);
+  background: linear-gradient(#26272b, #111214);
+  box-shadow: 0 calc(var(--s) * 0.04) calc(var(--s) * 0.09) rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+.tvset .screen { position: relative; aspect-ratio: 16 / 9; overflow: hidden; background: #000; }
+.tvset .screen iframe { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; pointer-events: none; }
+.tvset .screen::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: linear-gradient(125deg, rgba(255, 255, 255, 0.07), transparent 35%); }
+.tvset .nosignal { position: absolute; inset: 0; display: grid; place-items: center; color: #aaa; font: 500 calc(var(--s) * 0.04) "Segoe UI", sans-serif; }
+.tvset .tvbar { height: calc(var(--s) * 0.035); display: flex; align-items: center; justify-content: flex-end; padding-right: 3%; }
+.tvset .led { width: calc(var(--s) * 0.008); aspect-ratio: 1; border-radius: 50%; background: #e04848; box-shadow: 0 0 calc(var(--s) * 0.01) #e04848; }

@@ -6,12 +6,12 @@ import {
   unproject, youtubeEmbed, type MapView, type Place,
 } from "./live";
 import { invoke } from "@tauri-apps/api/core";
-import { escapeHtml } from "./decor";
+import { SEA_VIEW, escapeHtml } from "./decor";
 import type { Item } from "./items";
 import { SOUND_NAMES, type SoundKind } from "./sound";
 
 type Changes = Partial<Item>;
-export type PanelKind = "thermometer" | "hygrometer" | "map" | "window";
+export type PanelKind = "thermometer" | "hygrometer" | "map" | "window" | "tv";
 const WINDOW_SOUNDS: SoundKind[] = ["ocean", "wind", "rain", "fire"];
 
 const $ = <T extends HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -49,6 +49,7 @@ export class Panels {
     this.panel.dataset.kind = item.kind;
     if (item.kind === "map") this.buildMap(item);
     else if (item.kind === "window") this.buildWindow(item);
+    else if (item.kind === "tv") this.buildTv(item);
     else this.buildSensor(item);
     this.overlay.hidden = false;
     if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
@@ -264,7 +265,6 @@ export class Panels {
   // ---------- Video window ----------
 
   private buildWindow(item: Item): void {
-    let link = item.url ?? DEFAULT_VIDEO;
     let picture = item.path;
     let sound = item.sound ?? "none";
     let volume = item.volume ?? 0.5;
@@ -272,61 +272,41 @@ export class Panels {
       <div class="player"></div>
       <div class="row">
         <span class="label">Outside</span>
-        <button type="button" data-act="iss">Space station (live)</button>
-        <form class="videolink"><input type="url" aria-label="YouTube link" placeholder="or paste a YouTube link">
-          <button type="submit">Show</button></form>
         <button type="button" data-act="picture">Your picture…</button>
+        <button type="button" data-act="sea">Sea at dusk</button>
       </div>
-      <div class="row" role="group" aria-label="Sound behind the window">
+      <div class="row" role="group" aria-label="Sound outside the window">
         <span class="label">Sound</span>
         <button type="button" data-sound="none">None</button>
         ${WINDOW_SOUNDS.map((k) => `<button type="button" data-sound="${k}">${SOUND_NAMES[k]}</button>`).join("")}
         <input type="range" min="0" max="1" step="0.05" aria-label="Volume">
       </div>
-      <div class="row end"><span class="note">On the wall, videos play without their own sound. Here you can listen with sound.</span>
+      <div class="row end"><span class="note">Tip: a photo of a beach, forest or cabin with a matching sound makes a calm view.</span>
         <button type="button" class="primary" data-act="done">Done</button></div>`;
     const player = this.panel.querySelector(".player") as HTMLDivElement;
-    const input = this.panel.querySelector('input[type="url"]') as HTMLInputElement;
     const range = this.panel.querySelector('input[type="range"]') as HTMLInputElement;
     const show = async () => {
-      if (picture) {
-        const src = await invoke<string>("load_image", { path: picture }).catch(() => null);
-        player.innerHTML = src ? `<img src="${src}" alt="">` : '<div class="hint">Could not open that picture.</div>';
+      if (!picture) {
+        player.innerHTML = SEA_VIEW;
         return;
       }
-      const src = youtubeEmbed(link, { muted: false, controls: true });
-      player.innerHTML = src
-        ? `<iframe src="${escapeHtml(src)}" title="Video" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>`
-        : '<div class="hint">That doesn\'t look like a YouTube link.</div>';
+      const src = await invoke<string>("load_image", { path: picture }).catch(() => null);
+      player.innerHTML = src ? `<img src="${src}" alt="">` : '<div class="hint">Could not open that picture.</div>';
     };
     const showSound = () => {
       this.panel.querySelectorAll<HTMLButtonElement>("[data-sound]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.sound === sound)));
       range.value = String(volume);
       range.disabled = sound === "none";
     };
-    input.value = item.url ?? "";
     void show();
     showSound();
-    this.panel.querySelector("form")?.addEventListener("submit", (e) => {
-      e.preventDefault();
-      if (!youtubeEmbed(input.value, { muted: true, controls: false })) {
-        player.innerHTML = '<div class="hint">That doesn\'t look like a YouTube link.</div>';
-        return;
-      }
-      link = input.value.trim();
-      picture = undefined;
-      this.apply({ url: link, path: undefined });
-      void show();
-    });
     this.panel.addEventListener("click", async (e) => {
       const b = (e.target as HTMLElement).closest<HTMLButtonElement>("button");
       if (!b) return;
       if (b.dataset.act === "done") this.close();
-      if (b.dataset.act === "iss") {
-        link = DEFAULT_VIDEO;
+      if (b.dataset.act === "sea") {
         picture = undefined;
-        input.value = "";
-        this.apply({ url: DEFAULT_VIDEO, path: undefined });
+        this.apply({ path: undefined });
         void show();
       }
       if (b.dataset.act === "picture") {
@@ -339,6 +319,77 @@ export class Panels {
       if (b.dataset.sound) {
         sound = b.dataset.sound as SoundKind | "none";
         this.apply({ sound, volume });
+        showSound();
+      }
+    });
+    range.addEventListener("input", () => {
+      volume = Number(range.value);
+      this.apply({ volume });
+    });
+  }
+
+  // ---------- TV ----------
+
+  private buildTv(item: Item): void {
+    let link = item.url ?? DEFAULT_VIDEO;
+    let muted = !!item.muted;
+    let volume = item.volume ?? 0.5;
+    this.panel.innerHTML = `
+      <div class="player"></div>
+      <div class="row">
+        <span class="label">Channel</span>
+        <button type="button" data-act="iss">Space station (live)</button>
+        <form class="videolink"><input type="url" aria-label="YouTube link" placeholder="or paste any YouTube link: a video or a live stream">
+          <button type="submit">Watch</button></form>
+      </div>
+      <div class="row" role="group" aria-label="Sound of the TV on the wall">
+        <span class="label">On the wall</span>
+        <button type="button" data-muted="false">Sound on</button>
+        <button type="button" data-muted="true">Sound off</button>
+        <input type="range" min="0" max="1" step="0.05" aria-label="Volume on the wall">
+      </div>
+      <div class="row end"><span class="note">While this is open, the TV on the wall is quiet so you only hear this one.</span>
+        <button type="button" class="primary" data-act="done">Done</button></div>`;
+    const player = this.panel.querySelector(".player") as HTMLDivElement;
+    const input = this.panel.querySelector('input[type="url"]') as HTMLInputElement;
+    const range = this.panel.querySelector('input[type="range"]') as HTMLInputElement;
+    const show = () => {
+      const src = youtubeEmbed(link, { muted: false, controls: true });
+      player.innerHTML = src
+        ? `<iframe src="${escapeHtml(src)}" title="TV" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>`
+        : '<div class="hint">That doesn\'t look like a YouTube link.</div>';
+    };
+    const showSound = () => {
+      this.panel.querySelectorAll<HTMLButtonElement>("[data-muted]").forEach((b) => b.setAttribute("aria-pressed", String(b.dataset.muted === String(muted))));
+      range.value = String(volume);
+      range.disabled = muted;
+    };
+    input.value = item.url && item.url !== DEFAULT_VIDEO ? item.url : "";
+    show();
+    showSound();
+    this.panel.querySelector("form")?.addEventListener("submit", (e) => {
+      e.preventDefault();
+      if (!youtubeEmbed(input.value, { muted: true, controls: false })) {
+        player.innerHTML = '<div class="hint">That doesn\'t look like a YouTube link.</div>';
+        return;
+      }
+      link = input.value.trim();
+      this.apply({ url: link });
+      show();
+    });
+    this.panel.addEventListener("click", (e) => {
+      const b = (e.target as HTMLElement).closest<HTMLButtonElement>("button");
+      if (!b) return;
+      if (b.dataset.act === "done") this.close();
+      if (b.dataset.act === "iss") {
+        link = DEFAULT_VIDEO;
+        input.value = "";
+        this.apply({ url: DEFAULT_VIDEO });
+        show();
+      }
+      if (b.dataset.muted) {
+        muted = b.dataset.muted === "true";
+        this.apply({ muted });
         showSound();
       }
     });
